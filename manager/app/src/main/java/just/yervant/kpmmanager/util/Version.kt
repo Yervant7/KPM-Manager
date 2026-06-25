@@ -3,6 +3,7 @@ package just.yervant.kpmmanager.util
 import androidx.core.content.pm.PackageInfoCompat
 import just.yervant.kpmmanager.Natives
 import just.yervant.kpmmanager.kpmmApp
+import just.yervant.kpmmanager.BuildConfig
 import org.ini4j.Ini
 import java.io.StringReader
 import com.topjohnwu.superuser.nio.ExtendedFile
