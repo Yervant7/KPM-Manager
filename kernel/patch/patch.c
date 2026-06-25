@@ -2,11 +2,9 @@
 #include <ksyms.h>
 #include <kallsyms.h>
 #include <hook.h>
-#include <accctl.h>
 #include <linux/sched.h>
 #include <linux/sched/task.h>
 #include <linux/cred.h>
-#include <linux/capability.h>
 #include <syscall.h>
 #include <module.h>
 #include <predata.h>
@@ -44,18 +42,10 @@ void linux_libs_symbol_init();
 int resolve_struct();
 int task_observer();
 int bypass_kcfi();
-int bypass_selinux();
 int resolve_pt_regs();
 int supercall_install();
 void module_init();
 void syscall_init();
-int kstorage_init();
-int su_compat_init();
-
-#ifdef ANDROID
-int android_user_init();
-int android_sepolicy_flags_fix();
-#endif
 
 static void before_rest_init(hook_fargs4_t *args, void *udata)
 {
@@ -68,31 +58,14 @@ static void before_rest_init(hook_fargs4_t *args, void *udata)
     if ((rc = resolve_struct())) goto out;
     log_boot("resolve_struct done: %d\n", rc);
 
-    if ((rc = bypass_selinux())) goto out;
-    log_boot("bypass_selinux done: %d\n", rc);
-
     if ((rc = task_observer())) goto out;
     log_boot("task_observer done: %d\n", rc);
 
     rc = supercall_install();
     log_boot("supercall_install done: %d\n", rc);
 
-    rc = kstorage_init();
-    log_boot("kstorage_init done: %d\n", rc);
-
-    rc = su_compat_init();
-    log_boot("su_compat_init done: %d\n", rc);
-
     rc = resolve_pt_regs();
     log_boot("resolve_pt_regs done: %d\n", rc);
-
-#ifdef ANDROID
-    rc = android_sepolicy_flags_fix();
-    log_boot("android_sepolicy_flags_fix done: %d\n", rc);
-
-    rc = android_user_init();
-    log_boot("android_user_init done: %d\n", rc);
-#endif
 
 out:
     return;

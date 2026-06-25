@@ -42,10 +42,6 @@ BASE_SRCS += $(wildcard patch/common/*.c)
 BASE_SRCS += $(wildcard patch/module/*.c)
 BASE_SRCS += $(wildcard patch/ksyms/*.c)
 
-ifdef ANDROID
-	BASE_SRCS += $(wildcard patch/android/*.c)
-endif
-
 SRCS += $(BASE_SRCS)
 SRCS += $(LINUX_SRCS)
 
@@ -71,8 +67,6 @@ base/sha256.o: base/sha256.c
 
 .PHONY: hdr
 hdr:
-	cp -Rf patch/include/uapi ../user/
-	cp -f ../version ../user/
 	cp -f include/preset.h ../tools/
 
 .PHONY: clean

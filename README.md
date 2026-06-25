@@ -16,7 +16,7 @@
 - Kernel function inline hook and syscall table hook are provided.
 - Additional SU for Android.
 
-If you are using Android, [APatch](https://github.com/bmax121/APatch) would be a better choice.
+If you are using Android, [KPM-Manager](https://github.com/yervant7/KPM-Manager) would be a better choice.
 
 ## Requirement
 

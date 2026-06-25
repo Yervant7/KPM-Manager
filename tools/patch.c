@@ -360,7 +360,7 @@ static void disable_pi_map(char *img, int32_t imglen)
 }
 
 int patch_update_img(const char *kimg_path, const char *kpimg_path, const char *out_path, const char *superkey,
-                     bool root_key, const char **additional, extra_config_t *extra_configs, int extra_config_num)
+                     const char **additional, extra_config_t *extra_configs, int extra_config_num)
 {
     set_log_enable(true);
 
@@ -560,21 +560,8 @@ int patch_update_img(const char *kimg_path, const char *kpimg_path, const char *
     fillin_patch_config(&kallsym, kallsym_kimg, ori_kimg_len, &setup->patch_config, kinfo->is_be, 0);
 
     // superkey
-    if (!root_key) {
-        tools_logi("superkey: %s\n", superkey);
-        strncpy((char *)setup->superkey, superkey, SUPER_KEY_LEN - 1);
-    } else {
-        int len = SHA256_BLOCK_SIZE > ROOT_SUPER_KEY_HASH_LEN ? ROOT_SUPER_KEY_HASH_LEN : SHA256_BLOCK_SIZE;
-        BYTE buf[SHA256_BLOCK_SIZE];
-        SHA256_CTX ctx;
-        sha256_init(&ctx);
-        sha256_update(&ctx, (const BYTE *)superkey, strnlen(superkey, SUPER_KEY_LEN));
-        sha256_final(&ctx, buf);
-        memcpy(setup->root_superkey, buf, len);
-        char *hexstr = bytes_to_hexstr(setup->root_superkey, len);
-        tools_logi("root superkey hash: %s\n", hexstr);
-        free(hexstr);
-    }
+    tools_logi("superkey: %s\n", superkey);
+    strncpy((char *)setup->superkey, superkey, SUPER_KEY_LEN - 1);
 
     // modify kernel entry
     int paging_init_offset = get_symbol_offset_exit(&kallsym, kallsym_kimg, "paging_init");
