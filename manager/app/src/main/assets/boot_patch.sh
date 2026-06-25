@@ -43,7 +43,7 @@ if [ ! -f kernel ]; then
 echo "- Unpacking boot image"
 
 set -x
-./kptools unpack "$BOOTIMAGE" "$@"
+./magiskboot unpack "$BOOTIMAGE" "$@"
 patch_rc=$?
 set +x
   if [ $patch_rc -ne 0 ]; then
@@ -82,7 +82,7 @@ if [ $patch_rc -ne 0 ]; then
 fi
 
 echo "- Repacking boot image"
-./kptools repack "$BOOTIMAGE"
+./magiskboot repack "$BOOTIMAGE"
 repack_rc=$?
 
 if [ ! $(./kptools -i kernel.ori -f | grep CONFIG_KALLSYMS_ALL=y) ]; then
