@@ -15,6 +15,7 @@
 # bootimg            binary        The target boot image
 # kpimg              binary        KernelPatch core Image
 # kptools            executable    The KernelPatch tools binary to inject kpimg to kernel Image
+# magiskboot         executable    Magisk tool to unpack boot.img.
 #
 #######################################################################################
 
@@ -68,8 +69,7 @@ mv kernel kernel.ori
 
 echo "- Patching kernel"
 
-KPT_ARGS=""
-[ "$SUPERKEY" != "su" ] && KPT_ARGS="-s $SUPERKEY"
+KPT_ARGS="-s $SUPERKEY"
 
 set -x
 ./kptools -p -i kernel.ori $KPT_ARGS -k kpimg -o kernel "$@"
