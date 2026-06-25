@@ -26,7 +26,7 @@ if [ ! -f kernel ]; then
 echo "- Unpacking boot image"
 
 set -x
-./kptools unpack "$BOOTIMAGE" "$@"
+./magiskboot unpack "$BOOTIMAGE" "$@"
 patch_rc=$?
 if [ $patch_rc -ne 0 ]; then
     >&2 echo "- Unpack error: $patch_rc"
@@ -47,7 +47,7 @@ if [ ! $(./kptools -i kernel -l | grep patched=false) ]; then
       exit $?
     fi
     echo "- Repacking boot image"
-    ./kptools repack "$BOOTIMAGE"
+    ./magiskboot repack "$BOOTIMAGE"
     if [ $? -ne 0 ]; then
       >&2 echo "- Repack error: $?"
       exit $?
