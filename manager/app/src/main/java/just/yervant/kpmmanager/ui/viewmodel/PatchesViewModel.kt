@@ -78,7 +78,7 @@ class PatchesViewModel : ViewModel() {
         patchDir.deleteRecursively()
         patchDir.mkdirs()
         val execs = listOf(
-            "libkptools.so", "libbusybox.so", "libbootctl.so",
+            "libkptools.so", "libmagiskboot.so", "libbusybox.so", "libbootctl.so",
         )
         error = ""
 
@@ -129,7 +129,7 @@ class PatchesViewModel : ViewModel() {
         val result = shellForResult(
             shell,
             "cd $patchDir",
-            "./kptools unpacknolog $bootimg",
+            "./magiskboot unpack $bootimg",
             "./kptools -l -i kernel",
         )
         if (result.isSuccess) {
