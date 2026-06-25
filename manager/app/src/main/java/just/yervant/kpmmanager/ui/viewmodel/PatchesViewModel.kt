@@ -446,24 +446,6 @@ class PatchesViewModel : ViewModel() {
                     ).exec()
                     if (setNextActiveSlot.isSuccess) {
                         logs.add("- Switch done")
-                        logs.add("- Writing boot marker script...")
-                        val markBootableScript = shell.newJob().add(
-                            "mkdir -p /data/adb/post-fs-data.d && rm -rf /data/adb/post-fs-data.d/post_ota.sh && touch /data/adb/post-fs-data.d/post_ota.sh",
-                            "echo \"chmod 0777 $patchDir/bootctl\" > /data/adb/post-fs-data.d/post_ota.sh",
-                            "echo \"chown root:root 0777 $patchDir/bootctl\" > /data/adb/post-fs-data.d/post_ota.sh",
-                            "echo \"$patchDir/bootctl mark-boot-successful\" > /data/adb/post-fs-data.d/post_ota.sh",
-                            "echo >> /data/adb/post-fs-data.d/post_ota.sh",
-                            "echo \"rm -rf $patchDir\" >> /data/adb/post-fs-data.d/post_ota.sh",
-                            "echo >> /data/adb/post-fs-data.d/post_ota.sh",
-                            "echo \"rm -f /data/adb/post-fs-data.d/post_ota.sh\" >> /data/adb/post-fs-data.d/post_ota.sh",
-                            "chmod 0777 /data/adb/post-fs-data.d/post_ota.sh",
-                            "chown root:root /data/adb/post-fs-data.d/post_ota.sh",
-                        ).to(logs, logs).exec()
-                        if (markBootableScript.isSuccess) {
-                            logs.add("- Boot marker script write done")
-                        } else {
-                            logs.add("[X] Boot marker scripts write failed")
-                        }
                     }
                 }
                 logs.add("- Reboot to finish the installation...")
