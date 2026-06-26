@@ -41,7 +41,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.remember
@@ -63,6 +62,7 @@ import com.ramcosta.composedestinations.generated.NavGraphs
 import com.ramcosta.composedestinations.rememberNavHostEngine
 import com.ramcosta.composedestinations.utils.isRouteOnBackStackAsState
 import com.ramcosta.composedestinations.utils.rememberDestinationsNavigator
+import com.topjohnwu.superuser.Shell
 import just.yervant.kpmmanager.KPMMApplication
 import just.yervant.kpmmanager.ui.screen.BottomBarDestination
 import just.yervant.kpmmanager.ui.theme.KPMManagerTheme
@@ -85,6 +85,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         super.onCreate(savedInstanceState)
+
+        Shell.getShell { shell ->
+            shell.isRoot
+        }
 
         setContent {
             KPMManagerTheme {

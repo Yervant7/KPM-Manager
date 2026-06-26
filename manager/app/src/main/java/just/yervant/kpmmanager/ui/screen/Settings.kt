@@ -3,7 +3,6 @@ package just.yervant.kpmmanager.ui.screen
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
@@ -12,7 +11,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,16 +26,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.ColorLens
-import androidx.compose.material.icons.filled.Commit
 import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.DeveloperMode
-import androidx.compose.material.icons.filled.Engineering
 import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.InvertColors
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Translate
-import androidx.compose.material.icons.filled.Update
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -47,10 +41,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.IconButton
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-
 import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.BasicAlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
@@ -94,14 +86,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import just.yervant.kpmmanager.KPMMApplication
 import just.yervant.kpmmanager.BuildConfig
-import just.yervant.kpmmanager.Natives
 import just.yervant.kpmmanager.R
 import just.yervant.kpmmanager.ui.component.SwitchItem
 import just.yervant.kpmmanager.ui.component.rememberLoadingDialog
 import just.yervant.kpmmanager.ui.theme.refreshTheme
 import just.yervant.kpmmanager.util.getBugreportFile
 import just.yervant.kpmmanager.util.outputStream
-import just.yervant.kpmmanager.util.rootShellForResult
 import just.yervant.kpmmanager.util.ui.APDialogBlurBehindUtils
 import just.yervant.kpmmanager.util.ui.LocalSnackbarHost
 import just.yervant.kpmmanager.util.ui.NavigationBarsSpacer

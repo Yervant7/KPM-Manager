@@ -25,59 +25,12 @@ object Version {
         return vi.toUInt()
     }
 
-    fun getKpImg(): String {
-        val patchDir: ExtendedFile = FileSystemManager.getLocal().getFile(kpmmApp.filesDir.parent, "check")
-        patchDir.deleteRecursively()
-        patchDir.mkdirs()
-        val execs = listOf(
-            "libkptools.so",  "libbusybox.so"
-        )
-
-        val info = kpmmApp.applicationInfo
-        val libs = File(info.nativeLibraryDir).listFiles { _, name ->
-            execs.contains(name)
-        } ?: emptyArray()
-
-        for (lib in libs) {
-            val name = lib.name.substring(3, lib.name.length - 3)
-            Os.symlink(lib.path, "$patchDir/$name")
-        }
-
-        for (script in listOf(
-            "boot_patch.sh", "boot_unpatch.sh", "boot_extract.sh", "util_functions.sh", "kpimg"
-        )) {
-            val dest = File(patchDir, script)
-            kpmmApp.assets.open(script).writeTo(dest)
-        }
-
-        return withNewRootShell {
-            val result = shellForResult(
-                this, "cd $patchDir", "./kptools -l -k kpimg"
-            )
-
-            if (result.isSuccess) {
-                val ini = Ini(StringReader(result.out.joinToString("\n")))
-                val kpimg = ini["kpimg"]
-                if (kpimg != null) {
-                    return@withNewRootShell kpimg["compile_time"].toString()
-                }
-            }
-
-            "unknown"
-        }
-    }
-
     fun uInt2String(ver: UInt): String {
         return "%d.%d.%d".format(
             ver.and(0xff0000u).shr(16).toInt(),
             ver.and(0xff00u).shr(8).toInt(),
             ver.and(0xffu).toInt()
         )
-    }
-    
-    fun installedKPTime(): String {
-        val time = Natives.kernelPatchBuildTime()
-        return if (time.startsWith("ERROR_")) "读取失败" else time
     }
 
     fun buildKpmmVUInt(): UInt {

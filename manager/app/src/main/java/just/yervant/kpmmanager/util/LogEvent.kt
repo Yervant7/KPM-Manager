@@ -3,6 +3,7 @@ package just.yervant.kpmmanager.util
 import android.content.Context
 import android.os.Build
 import android.system.Os
+import com.topjohnwu.superuser.Shell
 import com.topjohnwu.superuser.ShellUtils
 import java.io.File
 import java.io.FileWriter
@@ -25,18 +26,16 @@ fun getBugreportFile(context: Context): File {
     val propFile = File(bugreportDir, "props.txt")
     val kernelConfig = File(bugreportDir, "defconfig")
 
-    val shell = tryGetRootShell()
+    Shell.cmd("dmesg > ${dmesgFile.absolutePath}").exec()
+    Shell.cmd("logcat -d > ${logcatFile.absolutePath}").exec()
+    Shell.cmd("tar -czf ${tombstonesFile.absolutePath} -C /data/tombstones .").exec()
+    Shell.cmd("tar -czf ${dropboxFile.absolutePath} -C /data/system/dropbox .").exec()
+    Shell.cmd("tar -czf ${pstoreFile.absolutePath} -C /sys/fs/pstore .").exec()
+    Shell.cmd("tar -czf ${diagFile.absolutePath} -C /data/vendor/diag .").exec()
+    Shell.cmd("getprop > ${propFile.absolutePath}").exec()
+    Shell.cmd("zcat /proc/config.gz > ${kernelConfig.absolutePath}").exec()
 
-    shell.newJob().add("dmesg > ${dmesgFile.absolutePath}").exec()
-    shell.newJob().add("logcat -d > ${logcatFile.absolutePath}").exec()
-    shell.newJob().add("tar -czf ${tombstonesFile.absolutePath} -C /data/tombstones .").exec()
-    shell.newJob().add("tar -czf ${dropboxFile.absolutePath} -C /data/system/dropbox .").exec()
-    shell.newJob().add("tar -czf ${pstoreFile.absolutePath} -C /sys/fs/pstore .").exec()
-    shell.newJob().add("tar -czf ${diagFile.absolutePath} -C /data/vendor/diag .").exec()
-    shell.newJob().add("getprop > ${propFile.absolutePath}").exec()
-    shell.newJob().add("zcat /proc/config.gz > ${kernelConfig.absolutePath}").exec()
-
-    val selinux = ShellUtils.fastCmd(shell, "getenforce")
+    val selinux = Shell.cmd("getenforce").exec().out
 
     // basic information
     val buildInfo = File(bugreportDir, "basic.txt")
@@ -70,10 +69,10 @@ fun getBugreportFile(context: Context): File {
 
     val targetFile = File(context.cacheDir, "KPM-Manager_bugreport_${current}.tar.gz")
 
-    shell.newJob().add("tar czf ${targetFile.absolutePath} -C ${bugreportDir.absolutePath} .")
+    Shell.cmd("tar czf ${targetFile.absolutePath} -C ${bugreportDir.absolutePath} .")
         .exec()
-    shell.newJob().add("rm -rf ${bugreportDir.absolutePath}").exec()
-    shell.newJob().add("chmod 0644 ${targetFile.absolutePath}").exec()
+    Shell.cmd("rm -rf ${bugreportDir.absolutePath}").exec()
+    Shell.cmd("chmod 0644 ${targetFile.absolutePath}").exec()
 
     return targetFile
 }

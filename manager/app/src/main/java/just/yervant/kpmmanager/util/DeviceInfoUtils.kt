@@ -8,11 +8,8 @@ import just.yervant.kpmmanager.R
 
 @Composable
 fun getSELinuxStatus(): String {
-    val shell = Shell.Builder.create()
-        .build("sh")
-
     val list = ArrayList<String>()
-    val result = shell.newJob().add("getenforce").to(list, list).exec()
+    val result = Shell.cmd("getenforce").to(list, list).exec()
     val output = result.out.joinToString("\n").trim()
 
     if (result.isSuccess) {

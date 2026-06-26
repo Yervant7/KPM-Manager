@@ -269,5 +269,7 @@ dependencies {
 
     compileOnly(libs.cxx)
     implementation(libs.miuix.ui)
+    implementation(libs.material.kolor)
 }
+
 

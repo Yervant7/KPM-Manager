@@ -28,17 +28,12 @@ import just.yervant.kpmmanager.kpmmApp
 import just.yervant.kpmmanager.util.Version
 import just.yervant.kpmmanager.util.copyAndClose
 import just.yervant.kpmmanager.util.copyAndCloseOut
-import just.yervant.kpmmanager.util.createRootShell
-import just.yervant.kpmmanager.util.getRootShell
 import just.yervant.kpmmanager.util.inputStream
-import just.yervant.kpmmanager.util.shellForResult
 import just.yervant.kpmmanager.util.writeTo
 import org.ini4j.Ini
-import java.io.BufferedReader
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
-import java.io.InputStreamReader
 import java.io.StringReader
 
 private const val TAG = "PatchViewModel"
@@ -71,7 +66,6 @@ class PatchesViewModel : ViewModel() {
 
     private val patchDir: ExtendedFile = FileSystemManager.getLocal().getFile(kpmmApp.filesDir.parent, "patch")
     private var srcBoot: ExtendedFile = patchDir.getChildFile("boot.img")
-    private var shell: Shell = createRootShell()
     private var prepared: Boolean = false
 
     private fun prepare() {
@@ -103,9 +97,7 @@ class PatchesViewModel : ViewModel() {
     }
 
     private fun parseKpimg() {
-        val result = shellForResult(
-            shell, "cd $patchDir", "./kptools -l -k kpimg"
-        )
+        val result = Shell.cmd("cd $patchDir", "./kptools -l -k kpimg").exec()
 
         if (result.isSuccess) {
             val ini = Ini(StringReader(result.out.joinToString("\n")))
@@ -126,12 +118,11 @@ class PatchesViewModel : ViewModel() {
     }
 
     private fun parseBootimg(bootimg: String) {
-        val result = shellForResult(
-            shell,
+        val result = Shell.cmd(
             "cd $patchDir",
             "./magiskboot unpack $bootimg",
             "./kptools -l -i kernel",
-        )
+        ).exec()
         if (result.isSuccess) {
             val ini = Ini(StringReader(result.out.joinToString("\n")))
             Log.d(TAG, "kernel image info: $ini")
@@ -217,12 +208,11 @@ class PatchesViewModel : ViewModel() {
             cmdBuilder += " true"
         }
 
-        val result = shellForResult(
-            shell,
+        val result = Shell.cmd(
             "export ASH_STANDALONE=1",
             "cd $patchDir",
             "./busybox sh $cmdBuilder",
-        )
+        ).exec()
 
         if (result.isSuccess) {
             bootSlot = if (!result.out.toString().contains("SLOT=")) {
@@ -280,9 +270,7 @@ class PatchesViewModel : ViewModel() {
                 Log.e(TAG, "Copy kpm error: $e")
             }
 
-            val result = shellForResult(
-                shell, "cd $patchDir", "./kptools -l -M ${kpmFile.path}"
-            )
+            val result = Shell.cmd("cd $patchDir", "./kptools -l -M ${kpmFile.path}").exec()
 
             if (result.isSuccess) {
                 val ini = Ini(StringReader(result.out.joinToString("\n")))
@@ -324,7 +312,7 @@ class PatchesViewModel : ViewModel() {
 
             logs.add("****************************")
 
-            val result = getRootShell().newJob().add(
+            val result = Shell.cmd(
                 "export ASH_STANDALONE=1",
                 "cd $patchDir",
                 "./busybox sh boot_unpatch.sh \"$bootDev\""
@@ -403,7 +391,7 @@ class PatchesViewModel : ViewModel() {
                 }
             }
 
-            val result = getRootShell().newJob().add(
+            val result = Shell.cmd(
                 "export ASH_STANDALONE=1",
                 "cd $patchDir",
                 commandString
@@ -426,22 +414,22 @@ class PatchesViewModel : ViewModel() {
                 needReboot = true
             } else if (mode == PatchMode.INSTALL_TO_NEXT_SLOT) {
                 logs.add("- Connecting boot hal...")
-                val bootctlStatus = shell.newJob().add(
+                val bootctlStatus = Shell.cmd(
                     "cd $patchDir", "chmod 0777 $patchDir/bootctl", "./bootctl hal-info"
                 ).to(logs, logs).exec()
                 if (!bootctlStatus.isSuccess) {
                     logs.add("[X] Failed to connect to boot hal, you may need switch slot manually")
                 } else {
-                    val currSlot = shellForResult(
-                        shell, "cd $patchDir", "./bootctl get-current-slot"
-                    ).out.toString()
+                    val currSlot = Shell.cmd(
+                        "cd $patchDir", "./bootctl get-current-slot"
+                    ).exec().out.toString()
                     val targetSlot = if (currSlot.contains("0")) {
                         1
                     } else {
                         0
                     }
                     logs.add("- Switching to next slot: $targetSlot...")
-                    val setNextActiveSlot = shell.newJob().add(
+                    val setNextActiveSlot = Shell.cmd(
                         "cd $patchDir", "./bootctl set-active-boot-slot $targetSlot"
                     ).exec()
                     if (setNextActiveSlot.isSuccess) {

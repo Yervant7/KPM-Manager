@@ -16,6 +16,7 @@ import okhttp3.OkHttpClient
 import java.io.File
 import java.util.Locale
 import kotlin.system.exitProcess
+import com.topjohnwu.superuser.Shell
 
 lateinit var kpmmApp: KPMMApplication
 
@@ -66,6 +67,13 @@ class KPMMApplication : Application(), Thread.UncaughtExceptionHandler {
             exitProcess(0)
         }
 
+        Shell.enableVerboseLogging = BuildConfig.DEBUG
+
+        Shell.setDefaultBuilder(
+            Shell.Builder.create()
+                .setContext(this)
+                .setTimeout(10)
+        )
 
         // TODO: We can't totally protect superkey from be stolen by root or LSPosed-like injection tools in user space, the only way is don't use superkey,
         // TODO: 1. make me root by kernel
