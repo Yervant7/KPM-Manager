@@ -353,7 +353,7 @@ uint64_t __attribute__((section(".transit0.text"))) __attribute__((__noinline__)
 {
     hook_chain_t *hook_chain = current_inline_hook_chain();
     if (!hook_chain) return 0;
-    hook_fargs0_t fargs = { 0 };
+    hook_fargs0_t fargs;
     fargs.skip_origin = 0;
     fargs.chain = hook_chain;
     for (int32_t i = 0; i < hook_chain->chain_items_max; i++) {
@@ -382,7 +382,7 @@ _transit4(uint64_t arg0, uint64_t arg1, uint64_t arg2, uint64_t arg3)
 {
     hook_chain_t *hook_chain = current_inline_hook_chain();
     if (!hook_chain) return 0;
-    hook_fargs4_t fargs = { 0 };
+    hook_fargs4_t fargs;
     fargs.skip_origin = 0;
     fargs.arg0 = arg0;
     fargs.arg1 = arg1;
@@ -417,7 +417,7 @@ _transit8(uint64_t arg0, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t a
 {
     hook_chain_t *hook_chain = current_inline_hook_chain();
     if (!hook_chain) return 0;
-    hook_fargs8_t fargs = { 0 };
+    hook_fargs8_t fargs;
     fargs.skip_origin = 0;
     fargs.arg0 = arg0;
     fargs.arg1 = arg1;
@@ -458,7 +458,7 @@ _transit12(uint64_t arg0, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t 
 {
     hook_chain_t *hook_chain = current_inline_hook_chain();
     if (!hook_chain) return 0;
-    hook_fargs12_t fargs = { 0 };
+    hook_fargs12_t fargs;
     fargs.skip_origin = 0;
     fargs.arg0 = arg0;
     fargs.arg1 = arg1;
