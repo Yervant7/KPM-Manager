@@ -56,12 +56,81 @@ int32_t try_get_symbol_offset_zero(kallsym_t *info, char *img, char *symbol)
 }
 
 // todo
-void select_map_area(kallsym_t *kallsym, char *image_buf, int32_t *map_start, int32_t *max_size)
+void select_map_area(kallsym_t *kallsym, char *image_buf, int32_t *map_start, int32_t *max_size, bool is_gki)
 {
     int32_t addr = 0x200;
     addr = get_symbol_offset_exit(kallsym, image_buf, "tcp_init_sock");
-    *map_start = align_ceil(addr, 16);
+
+    if (!is_gki) {
+        // Non-GKI kernels are unlikely to have PAC instructions here.
+        // Use ceil alignment to avoid including the function header.
+        *map_start = align_ceil(addr, 16);
+        *max_size = 0x800;
+        return;
+    }
+
+    // GKI kernels (>= 5.10): include function header and NOP PAC/AUT pairs
+    // to avoid SCS instruction issues when the region is repurposed.
+    *map_start = align_floor(addr, 16);
     *max_size = 0x800;
+
+    // Prefixed constants to avoid collisions with global defines
+#define MAP_NOP_INST 0xD503201Fu
+#define MAP_PACIASP 0xD503233Fu
+#define MAP_PAC_AUT_MASK 0xFFFFFD1Fu
+#define MAP_PAC_AUT_MATCH 0xD503211Fu
+
+    uint32_t pos = 0;
+    uint32_t count = 0;
+    uint32_t asmbit = sizeof(uint32_t);
+    bool is_first_pac = false;
+
+    // Scan the map area for PAC/AUT instructions and NOP them
+    for (uint32_t i = 0; i < *max_size; i += asmbit) {
+        uint32_t insn = *(uint32_t *)(image_buf + addr + i);
+        // Check if PACIASP appears near the start (within first 5 instructions)
+        if (!is_first_pac && insn == MAP_PACIASP && i < asmbit * 5) {
+            is_first_pac = true;
+        }
+        if ((insn & MAP_PAC_AUT_MASK) == MAP_PAC_AUT_MATCH) {
+            pos = i;
+            count++;
+            *(uint32_t *)(image_buf + addr + pos) = MAP_NOP_INST;
+        }
+    }
+
+    if (!is_first_pac) {
+        tools_logi("no first pac instruction found\n");
+    }
+
+    // PAC/AUT instructions should come in pairs. If odd count,
+    // search the extended range for the missing pair.
+    if (count % 2 != 0) {
+        tools_logi("pac verify not pair  pos: %x  count: %d\n", pos, count);
+
+        uint32_t second_pos = 0;
+        bool found = false;
+        for (uint32_t j = *max_size; j < *max_size * 2; j += asmbit) {
+            uint32_t insn = *(uint32_t *)(image_buf + addr + j);
+            if ((insn & MAP_PAC_AUT_MASK) == MAP_PAC_AUT_MATCH) {
+                second_pos = j;
+                found = true;
+                break;
+            }
+        }
+
+        if (found) {
+            tools_logi("second_pos: %x\n", second_pos);
+            *(uint32_t *)(image_buf + addr + second_pos) = MAP_NOP_INST;
+        } else {
+            tools_logw("unpaired PAC/AUT: no match found in extended range\n");
+        }
+    }
+
+#undef MAP_NOP_INST
+#undef MAP_PACIASP
+#undef MAP_PAC_AUT_MASK
+#undef MAP_PAC_AUT_MATCH
 }
 
 int fillin_map_symbol(kallsym_t *kallsym, char *img_buf, map_symbol_t *symbol, int32_t target_is_be)

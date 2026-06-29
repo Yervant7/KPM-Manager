@@ -7,6 +7,7 @@
 #define _KP_HMEM_H_
 
 #include <stdint.h>
+#include <hook.h>
 
 int hook_mem_add(uint64_t start, int32_t size);
 void *hook_mem_zalloc(uintptr_t origin_addr, enum hook_type type);

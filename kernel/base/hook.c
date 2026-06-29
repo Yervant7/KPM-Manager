@@ -342,15 +342,22 @@ int32_t branch_from_to(uint32_t *tramp_buf, uint64_t src_addr, uint64_t dst_addr
 // transit0
 typedef uint64_t (*transit0_func_t)();
 
+/*
+ * Read the hook_chain_t pointer from x16, which was loaded by the
+ * transit header (LDR X16, literal pool) before branching here.
+ * Using 'register asm' is the idiomatic way to bind a C variable
+ * to a specific ARM64 register in GCC/Clang.
+ */
+#define current_inline_hook_chain() ({                         \
+    register uint64_t chain_va asm("x16");                     \
+    asm volatile("" : "=r"(chain_va));                         \
+    (hook_chain_t *)chain_va;                                  \
+})
+
 uint64_t __attribute__((section(".transit0.text"))) __attribute__((__noinline__)) _transit0()
 {
-    uint64_t this_va;
-    asm volatile("adr %0, ." : "=r"(this_va));
-    uint32_t *vptr = (uint32_t *)this_va;
-    while (*--vptr != ARM64_NOP) {
-    };
-    vptr--;
-    hook_chain_t *hook_chain = local_container_of((uint64_t)vptr, hook_chain_t, transit);
+    hook_chain_t *hook_chain = current_inline_hook_chain();
+    if (!hook_chain) return 0;
     hook_fargs0_t fargs;
     fargs.skip_origin = 0;
     fargs.chain = hook_chain;
@@ -378,13 +385,8 @@ typedef uint64_t (*transit4_func_t)(uint64_t, uint64_t, uint64_t, uint64_t);
 uint64_t __attribute__((section(".transit4.text"))) __attribute__((__noinline__))
 _transit4(uint64_t arg0, uint64_t arg1, uint64_t arg2, uint64_t arg3)
 {
-    uint64_t this_va;
-    asm volatile("adr %0, ." : "=r"(this_va));
-    uint32_t *vptr = (uint32_t *)this_va;
-    while (*--vptr != ARM64_NOP) {
-    };
-    vptr--;
-    hook_chain_t *hook_chain = local_container_of((uint64_t)vptr, hook_chain_t, transit);
+    hook_chain_t *hook_chain = current_inline_hook_chain();
+    if (!hook_chain) return 0;
     hook_fargs4_t fargs;
     fargs.skip_origin = 0;
     fargs.arg0 = arg0;
@@ -418,13 +420,8 @@ uint64_t __attribute__((section(".transit8.text"))) __attribute__((__noinline__)
 _transit8(uint64_t arg0, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5, uint64_t arg6,
           uint64_t arg7)
 {
-    uint64_t this_va;
-    asm volatile("adr %0, ." : "=r"(this_va));
-    uint32_t *vptr = (uint32_t *)this_va;
-    while (*--vptr != ARM64_NOP) {
-    };
-    vptr--;
-    hook_chain_t *hook_chain = local_container_of((uint64_t)vptr, hook_chain_t, transit);
+    hook_chain_t *hook_chain = current_inline_hook_chain();
+    if (!hook_chain) return 0;
     hook_fargs8_t fargs;
     fargs.skip_origin = 0;
     fargs.arg0 = arg0;
@@ -464,13 +461,8 @@ uint64_t __attribute__((section(".transit12.text"))) __attribute__((__noinline__
 _transit12(uint64_t arg0, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5, uint64_t arg6,
            uint64_t arg7, uint64_t arg8, uint64_t arg9, uint64_t arg10, uint64_t arg11)
 {
-    uint64_t this_va;
-    asm volatile("adr %0, ." : "=r"(this_va));
-    uint32_t *vptr = (uint32_t *)this_va;
-    while (*--vptr != ARM64_NOP) {
-    };
-    vptr--;
-    hook_chain_t *hook_chain = local_container_of((uint64_t)vptr, hook_chain_t, transit);
+    hook_chain_t *hook_chain = current_inline_hook_chain();
+    if (!hook_chain) return 0;
     hook_fargs12_t fargs;
     fargs.skip_origin = 0;
     fargs.arg0 = arg0;
@@ -569,8 +561,20 @@ hook_err_t hook_prepare(hook_t *hook)
     for (int i = 0; i < TRAMPOLINE_NUM; i++) {
         hook->origin_insts[i] = *((uint32_t *)hook->origin_addr + i);
     }
-    // trampline to replace_addr
-    hook->tramp_insts_num = branch_from_to(hook->tramp_insts, hook->origin_addr, hook->replace_addr);
+
+    // Detect PAC preamble (PACIASP/PACIBSP), possibly preceded by BTI.
+    // When present, insert BTI_JC at trampoline head so BR/BLR -> PACIASP works.
+    int pac_offset = 0;
+    if (hook->origin_insts[0] == ARM64_BTI_C || hook->origin_insts[0] == ARM64_BTI_JC) {
+        pac_offset = 1;
+    }
+    if (hook->origin_insts[pac_offset] == ARM64_PACIASP || hook->origin_insts[pac_offset] == ARM64_PACIBSP) {
+        hook->tramp_insts_num = branch_from_to(&hook->tramp_insts[1], hook->origin_addr, hook->replace_addr);
+        hook->tramp_insts[0] = ARM64_BTI_JC;
+        hook->tramp_insts_num++;
+    } else {
+        hook->tramp_insts_num = branch_from_to(hook->tramp_insts, hook->origin_addr, hook->replace_addr);
+    }
 
     // relocate
     for (int i = 0; i < sizeof(hook->relo_insts) / sizeof(hook->relo_insts[0]); i++) {
@@ -700,13 +704,18 @@ static hook_err_t hook_chain_prepare(uint32_t *transit, int32_t argno)
     }
 
     int32_t transit_num = (transit_end - transit_start) / 4;
-    // todo:assert
-    if (transit_num >= TRANSIT_INST_NUM) return -HOOK_TRANSIT_NO_MEM;
+    if (transit_num + TRANSIT_HEADER_NUM > TRANSIT_INST_NUM) return -HOOK_TRANSIT_NO_MEM;
 
+    // Build transit header: BTI + load chain address via x16 + skip data pool
     transit[0] = ARM64_BTI_JC;
-    transit[1] = ARM64_NOP;
+    transit[1] = ARM64_LDR_X16_12;
+    transit[2] = ARM64_B_16;
+    transit[3] = ARM64_NOP; // pad to align 8-byte literal pool
+    hook_chain_t *chain = local_container_of(transit, hook_chain_t, transit);
+    transit[4] = ((uint64_t)chain) & 0xFFFFFFFF;
+    transit[5] = ((uint64_t)chain) >> 32u;
     for (int i = 0; i < transit_num; i++) {
-        transit[i + 2] = ((uint32_t *)transit_start)[i];
+        transit[i + TRANSIT_HEADER_NUM] = ((uint32_t *)transit_start)[i];
     }
     return HOOK_NO_ERR;
 }

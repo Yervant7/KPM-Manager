@@ -40,11 +40,23 @@ typedef int8_t chain_item_state;
 #define local_container_of(ptr, type, member) ({ (type *)((char *)(ptr) - local_offsetof(type, member)); })
 
 #define HOOK_MEM_REGION_NUM 4
-#define TRAMPOLINE_NUM 4
+#define TRAMPOLINE_NUM 6
 #define RELOCATE_INST_NUM (TRAMPOLINE_NUM * 8 + 8)
 
 #define HOOK_CHAIN_NUM 0x10
 #define TRANSIT_INST_NUM 0x60
+
+/*
+ * Transit buffer header layout:
+ *   [0] BTI JC           — branch target identification
+ *   [1] LDR X16, .+12    — load chain address from literal pool
+ *   [2] B .+16           — skip over the 8-byte data pool
+ *   [3] NOP              — alignment pad (8-byte align for literal pool)
+ *   [4] chain_addr_lo    — low 32 bits of hook_chain_t pointer
+ *   [5] chain_addr_hi    — high 32 bits of hook_chain_t pointer
+ *   [6..] template code  — copied from transit template function
+ */
+#define TRANSIT_HEADER_NUM 6
 
 #define FP_HOOK_CHAIN_NUM 0x20
 
@@ -52,6 +64,12 @@ typedef int8_t chain_item_state;
 #define ARM64_BTI_C 0xd503245f
 #define ARM64_BTI_J 0xd503249f
 #define ARM64_BTI_JC 0xd50324df
+#define ARM64_PACIASP 0xd503233f
+#define ARM64_PACIBSP 0xd503237f
+
+/* Encoded ARM64 instructions for transit header */
+#define ARM64_LDR_X16_12 0x58000070u /* LDR X16, .+12 */
+#define ARM64_B_16 0x14000004u /* B .+16 */
 
 typedef struct
 {

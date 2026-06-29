@@ -214,7 +214,41 @@ int parse_image_patch_info(const char *kimg, int kimg_len, patched_kimg_t *pimg)
     if (!pimg->banner) tools_loge_exit("can't find linux banner\n");
 
     // patched or new
-    preset_t *old_preset = get_preset(kimg, kimg_len);
+    preset_t *old_preset = NULL;
+    const char *search_ptr = kimg;
+    int search_len = kimg_len;
+    int32_t saved_kimg_len = 0;
+    int align_kimg_len = 0;
+
+    while (search_len > 0) {
+        old_preset = get_preset(search_ptr, search_len);
+        if (!old_preset) break;
+
+        align_kimg_len = (char *)old_preset - kimg;
+        if (kimg_len - align_kimg_len < (int)sizeof(preset_t)) {
+            // Not enough space for preset_t, ignore (false positive?)
+            search_ptr = (char *)old_preset + 1;
+            search_len = kimg_len - (search_ptr - kimg);
+            old_preset = NULL;
+            continue;
+        }
+
+        saved_kimg_len = old_preset->setup.kimg_size;
+        if (is_be() ^ kinfo->is_be) saved_kimg_len = i32swp(saved_kimg_len);
+
+        if (align_kimg_len == (int)align_ceil(saved_kimg_len, SZ_4K)) {
+            break;
+        }
+
+        tools_logw("found magic string at 0x%x but saved kernel image size mismatch, ignoring (false positive?)\n",
+                   align_kimg_len);
+
+        // Search next
+        search_ptr = (char *)old_preset + 1;
+        search_len = kimg_len - (search_ptr - kimg);
+        old_preset = NULL;
+    }
+
     pimg->preset = old_preset;
 
     if (!old_preset) {
@@ -224,17 +258,15 @@ int parse_image_patch_info(const char *kimg, int kimg_len, patched_kimg_t *pimg)
     }
 
     tools_logi("patched kernel image ...\n");
-    int32_t saved_kimg_len = old_preset->setup.kimg_size;
-    if (is_be() ^ kinfo->is_be) saved_kimg_len = i32swp(saved_kimg_len);
-
-    int align_kimg_len = (char *)old_preset - kimg;
-    if (align_kimg_len != (int)align_ceil(saved_kimg_len, SZ_4K)) tools_loge_exit("saved kernel image size error\n");
     pimg->ori_kimg_len = saved_kimg_len;
 
     memcpy((char *)kimg, old_preset->setup.header_backup, sizeof(old_preset->setup.header_backup));
 
     // extra
-    int extra_offset = align_kimg_len + old_preset->setup.kpimg_size;
+    int64_t saved_kpimg_len = old_preset->setup.kpimg_size;
+    if (is_be() ^ kinfo->is_be) saved_kpimg_len = i64swp(saved_kpimg_len);
+
+    int extra_offset = align_kimg_len + saved_kpimg_len;
     if (extra_offset > kimg_len) tools_loge_exit("kpimg length mismatch\n");
     if (extra_offset == kimg_len) return 0;
 
@@ -392,6 +424,15 @@ int patch_update_img(const char *kimg_path, const char *kpimg_path, const char *
         tools_loge_exit("analyze_kallsym_info error\n");
     }
 
+    // Determine if this is a GKI kernel (>= 5.10) for PAC-aware processing
+#define KVER_ENCODE(major, minor, patch) (((major) << 16) | ((minor) << 8) | (patch))
+#define KVER_GKI_MIN KVER_ENCODE(5, 10, 0)
+    int kver = KVER_ENCODE(kallsym.version.major, kallsym.version.minor, kallsym.version.patch);
+    bool is_gki = kver >= KVER_GKI_MIN;
+    tools_logi("kernel version: %d.%d.%d, is_gki: %s\n",
+               kallsym.version.major, kallsym.version.minor, kallsym.version.patch,
+               is_gki ? "true" : "false");
+
     // kpimg
     char *kpimg = NULL;
     int kpimg_len = 0;
@@ -525,10 +566,24 @@ int patch_update_img(const char *kimg_path, const char *kpimg_path, const char *
     setup->extra_size = extra_size;
 
     int map_start, map_max_size;
-    select_map_area(&kallsym, kallsym_kimg, &map_start, &map_max_size);
+    select_map_area(&kallsym, kallsym_kimg, &map_start, &map_max_size, is_gki);
     setup->map_offset = map_start;
     setup->map_max_size = map_max_size;
     tools_logi("map_start: 0x%x, max_size: 0x%x\n", map_start, map_max_size);
+
+    // Sync NOP modifications from kallsym_kimg (where PAC/AUT were NOP'd)
+    // back to the output image so runtime sees the patched instructions.
+    int tcp_init_sock_offset = get_symbol_offset_exit(&kallsym, kallsym_kimg, "tcp_init_sock");
+    int sync_start = tcp_init_sock_offset;
+    int sync_size = map_max_size * 2;
+    if (sync_start + sync_size > ori_kimg_len) {
+        sync_size = ori_kimg_len - sync_start;
+    }
+    if (sync_size > 0) {
+        memcpy(out_kernel_file.kimg + sync_start, kallsym_kimg + sync_start, sync_size);
+        tools_logi("Synced NOP modifications from kallsym_kimg to output file (offset: 0x%x, size: 0x%x)\n",
+                   sync_start, sync_size);
+    }
 
     setup->kallsyms_lookup_name_offset = get_symbol_offset_exit(&kallsym, kallsym_kimg, "kallsyms_lookup_name");
 
@@ -538,6 +593,7 @@ int patch_update_img(const char *kimg_path, const char *kpimg_path, const char *
 
     if ((is_be() ^ kinfo->is_be)) {
         setup->kimg_size = i64swp(setup->kimg_size);
+        setup->kpimg_size = i64swp(setup->kpimg_size);
         setup->kernel_size = i64swp(setup->kernel_size);
         setup->page_shift = i64swp(setup->page_shift);
         setup->setup_offset = i64swp(setup->setup_offset);

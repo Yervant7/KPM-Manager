@@ -261,6 +261,17 @@ static int try_find_arm64_relo_table(kallsym_t *info, char *img, int32_t imglen)
 {
     if (!info->try_relo) return 0;
 
+    /*
+     * ELF64 relocation type extraction and known AArch64 rela types.
+     * r_info layout: [sym_index:32 | type:32]
+     * R_AARCH64_RELATIVE can appear as full r_info=0x403 (with sym) or type-only=0x403.
+     * Some kernels use r_info=0x101 (type=R_AARCH64_ABS64 with sym_index=0,
+     * effectively R_AARCH64_RELATIVE without symbol).
+     */
+#define ELF64_R_TYPE(info) ((uint32_t)((info) & 0xFFFFFFFF))
+#define R_AARCH64_RELATIVE_FULL 0x403
+#define R_AARCH64_RELATIVE_NOSYM 0x101
+
     uint64_t min_va = ELF64_KERNEL_MIN_VA;
     uint64_t max_va = ELF64_KERNEL_MAX_VA;
     uint64_t kernel_va = max_va;
@@ -270,7 +281,9 @@ static int try_find_arm64_relo_table(kallsym_t *info, char *img, int32_t imglen)
         uint64_t r_offset = uint_unpack(img + cand, 8, info->is_be);
         uint64_t r_info = uint_unpack(img + cand + 8, 8, info->is_be);
         uint64_t r_addend = uint_unpack(img + cand + 16, 8, info->is_be);
-        if ((r_offset & 0xffff000000000000) == 0xffff000000000000 && r_info == 0x403) {
+        uint32_t r_type = ELF64_R_TYPE(r_info);
+        if ((r_offset & 0xffff000000000000) == 0xffff000000000000 &&
+            (r_type == R_AARCH64_RELATIVE_NOSYM || r_type == R_AARCH64_RELATIVE_FULL)) {
             if (!(r_addend & 0xfff) && r_addend >= min_va && r_addend < kernel_va) kernel_va = r_addend;
             cand += 24;
             rela_num++;
@@ -331,6 +344,14 @@ static int try_find_arm64_relo_table(kallsym_t *info, char *img, int32_t imglen)
         }
 
         uint64_t value = uint_unpack(img + offset, 8, info->is_be);
+
+        // R_AARCH64_RELATIVE without symbol: r_addend is a file-relative offset,
+        // needs kernel_va added to produce the final virtual address.
+        uint32_t rel_type = ELF64_R_TYPE(r_info);
+        if (rel_type == R_AARCH64_RELATIVE_NOSYM) {
+            r_addend += kernel_va;
+        }
+
         if (value == r_addend) continue;
         *(uint64_t *)(img + offset) = value + r_addend;
         apply_num++;
