@@ -56,6 +56,9 @@ ${TARGET}: ${TARGET}.elf
 ${TARGET}.elf: ${OBJS}
 	${LD} -nostdlib -static -no-pie -Tkpimg.lds -o $@ $^
 
+base/fphook.o: CFLAGS += -ffixed-x16
+base/hook.o: CFLAGS += -ffixed-x16
+
 %.o: %.c
 	${CC} $(CFLAGS) $(INCLUDE) -c -O2 -o $@ $<
 

@@ -12,21 +12,18 @@
 // transit0
 typedef uint64_t (*transit0_func_t)();
 
-/*
- * Read the fp_hook_chain_t pointer from x16, loaded by the transit
- * header (LDR X16, literal pool) before branching into the template.
- */
-#define current_fp_hook_chain() ({                             \
-    register uint64_t chain_va asm("x16");                     \
-    asm volatile("" : "=r"(chain_va));                         \
-    (fp_hook_chain_t *)chain_va;                               \
-})
+#define current_fp_hook_chain()                       \
+    ({                                                \
+        uint64_t chain_va;                            \
+        asm volatile("mov %0, x16" : "=r"(chain_va)); \
+        (fp_hook_chain_t *)chain_va;                  \
+    })
 
 uint64_t __attribute__((section(".fp.transit0.text"))) __attribute__((__noinline__)) _fp_transit0()
 {
     fp_hook_chain_t *hook_chain = current_fp_hook_chain();
     if (!hook_chain) return 0;
-    hook_fargs0_t fargs;
+    hook_fargs0_t fargs = { 0 };
     fargs.skip_origin = 0;
     fargs.chain = hook_chain;
     for (int32_t i = 0; i < hook_chain->chain_items_max; i++) {
@@ -55,7 +52,7 @@ _fp_transit4(uint64_t arg0, uint64_t arg1, uint64_t arg2, uint64_t arg3)
 {
     fp_hook_chain_t *hook_chain = current_fp_hook_chain();
     if (!hook_chain) return 0;
-    hook_fargs4_t fargs;
+    hook_fargs4_t fargs = { 0 };
     fargs.skip_origin = 0;
     fargs.arg0 = arg0;
     fargs.arg1 = arg1;
@@ -90,7 +87,7 @@ _fp_transit8(uint64_t arg0, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_
 {
     fp_hook_chain_t *hook_chain = current_fp_hook_chain();
     if (!hook_chain) return 0;
-    hook_fargs8_t fargs;
+    hook_fargs8_t fargs = { 0 };
     fargs.skip_origin = 0;
     fargs.arg0 = arg0;
     fargs.arg1 = arg1;
@@ -131,7 +128,7 @@ _fp_transit12(uint64_t arg0, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64
 {
     fp_hook_chain_t *hook_chain = current_fp_hook_chain();
     if (!hook_chain) return 0;
-    hook_fargs12_t fargs;
+    hook_fargs12_t fargs = { 0 };
     fargs.skip_origin = 0;
     fargs.arg0 = arg0;
     fargs.arg1 = arg1;
