@@ -809,9 +809,10 @@ void hook_unwrap_remove(void *func, void *before, void *after, int remove)
     for (int i = 0; i < HOOK_CHAIN_NUM; i++) {
         if (chain->states[i] != CHAIN_ITEM_STATE_EMPTY) return;
     }
-    hook_chain_uninstall(chain);
+    chain->chain_items_max = 0;
+    // hook_chain_uninstall(chain);
     // todo: unsafe
-    hook_mem_free(chain);
+    // hook_mem_free(chain);
     logkv("Unwrap func: %llx\n", func);
 }
 KP_EXPORT_SYMBOL(hook_unwrap_remove);

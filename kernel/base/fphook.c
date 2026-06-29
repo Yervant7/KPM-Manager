@@ -299,9 +299,10 @@ void fp_hook_unwrap(uintptr_t fp_addr, void *before, void *after)
     for (int i = 0; i < FP_HOOK_CHAIN_NUM; i++) {
         if (chain->states[i] != CHAIN_ITEM_STATE_EMPTY) return;
     }
-    fp_unhook(chain->hook.fp_addr, (void *)chain->hook.origin_fp);
+    chain->chain_items_max = 0;
+    // fp_unhook(chain->hook.fp_addr, (void *)chain->hook.origin_fp);
     // todo: unsafe
-    hook_mem_free(chain);
+    // hook_mem_free(chain);
     logkv("Unwrap func pointer: %llx, %llx, %llx\n", fp_addr, before, after);
 }
 KP_EXPORT_SYMBOL(fp_hook_unwrap);
