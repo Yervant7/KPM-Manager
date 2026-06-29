@@ -56,16 +56,6 @@ class KPMMApplication : Application(), Thread.UncaughtExceptionHandler {
 
     override fun onCreate() {
         super.onCreate()
-        kpmmApp = this
-        just.yervant.kpmmanager.services.KPMServiceConnection.bind(this)
-
-        val isArm64 = Build.SUPPORTED_ABIS.any { it == "arm64-v8a" }
-        if (!isArm64) {
-            Toast.makeText(applicationContext, "Unsupported architecture!", Toast.LENGTH_LONG)
-                .show()
-            Thread.sleep(5000)
-            exitProcess(0)
-        }
 
         Shell.enableVerboseLogging = BuildConfig.DEBUG
 
@@ -74,6 +64,9 @@ class KPMMApplication : Application(), Thread.UncaughtExceptionHandler {
                 .setContext(this)
                 .setTimeout(10)
         )
+
+        kpmmApp = this
+        just.yervant.kpmmanager.services.KPMServiceConnection.bind(this)
 
         // TODO: We can't totally protect superkey from be stolen by root or LSPosed-like injection tools in user space, the only way is don't use superkey,
         // TODO: 1. make me root by kernel
