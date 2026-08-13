@@ -12,15 +12,8 @@ kernelpatch-objs := \
 	infra/syscall_table.o \
 	infra/sha256.o \
 	infra/secpass.o \
-	manager/apk_sign.o \
-	manager/manager.o \
 	supercall/supercall.o \
 	supercall/dispatch.o \
-	supercall/su.o \
-	supercall/kstorage.o \
-	supercall/sucompat.o \
-	supercall/sucompat_hook.o \
-	supercall/accctl.o \
 	hook/hook_engine.o \
 	hook/hook_runtime.o \
 	kpm/module.o \

@@ -4,6 +4,7 @@
  */
 
 #include "setup.h"
+
 #define NUMA_NO_NODE (-1)
 
 typedef uint64_t phys_addr_t;

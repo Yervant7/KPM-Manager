@@ -20,29 +20,24 @@
 #include <linux/sched.h>
 #include <linux/security.h>
 #include <syscall.h>
-#include <accctl.h>
 #include <module.h>
 #include <kputils.h>
 #include <linux/err.h>
 #include <linux/slab.h>
 #include <kputils.h>
+#include <symbol.h>
 #include <predata.h>
 #include <linux/random.h>
-#include <sucompat.h>
-#include <accctl.h>
-#include <kstorage.h>
-#ifdef ANDROID
-#include <userd.h>
-#endif
 
 #define MAX_KEY_LEN 128
 
 #include <linux/umh.h>
 
-static long call_test(long arg1, long arg2, long arg3)
+bool is_su_allow_uid(uid_t uid)
 {
-    return 0;
+    return uid == 0;
 }
+KP_EXPORT_SYMBOL(is_su_allow_uid);
 
 static long call_bootlog()
 {
@@ -132,26 +127,6 @@ static long call_kpm_info(const char *__user uname, char *__user out_info, int o
     return sz;
 }
 
-static long call_su(struct su_profile *__user uprofile)
-{
-    struct su_profile *profile = memdup_user(uprofile, sizeof(struct su_profile));
-    if (!profile || IS_ERR(profile)) return PTR_ERR(profile);
-    profile->scontext[sizeof(profile->scontext) - 1] = '\0';
-    int rc = commit_su(profile->to_uid, profile->scontext);
-    kvfree(profile);
-    return rc;
-}
-
-static long call_su_task(pid_t pid, struct su_profile *__user uprofile)
-{
-    struct su_profile *profile = memdup_user(uprofile, sizeof(struct su_profile));
-    if (!profile || IS_ERR(profile)) return PTR_ERR(profile);
-    profile->scontext[sizeof(profile->scontext) - 1] = '\0';
-    int rc = task_su(pid, profile->to_uid, profile->scontext);
-    kvfree(profile);
-    return rc;
-}
-
 static long call_skey_get(char *__user out_key, int out_len)
 {
     const char *key = get_superkey();
@@ -170,109 +145,7 @@ static long call_skey_set(char *__user new_key)
     return 0;
 }
 
-static long call_skey_root_enable(int enable)
-{
-    enable_auth_root_key(enable);
-    return 0;
-}
-
-static long call_grant_uid(struct su_profile *__user uprofile)
-{
-    struct su_profile *profile = memdup_user(uprofile, sizeof(struct su_profile));
-    if (!profile || IS_ERR(profile)) return PTR_ERR(profile);
-    int rc = su_add_allow_uid(profile->uid, profile->to_uid, profile->scontext);
-    kvfree(profile);
-    return rc;
-}
-
-static long call_revoke_uid(uid_t uid)
-{
-    return su_remove_allow_uid(uid);
-}
-
-static long call_su_allow_uid_nums()
-{
-    return su_allow_uid_nums();
-}
-
-#ifdef ANDROID
-extern int android_is_safe_mode;
-static long call_su_get_safemode()
-{
-    int result = android_is_safe_mode;
-    logkfd("[call_su_get_safemode] %d\n", result);
-    return result;
-}
-
-extern int load_ap_package_config(void);
-static long call_ap_load_package_config()
-{
-    int result = load_ap_package_config();
-    logkfd("[call_ap_load_package_config] loaded %d entries\n", result);
-    return result;
-}
-#endif
-
-static long call_su_list_allow_uid(uid_t *__user uids, int num)
-{
-    return su_allow_uids(1, uids, num);
-}
-
-static long call_su_allow_uid_profile(uid_t uid, struct su_profile *__user uprofile)
-{
-    return su_allow_uid_profile(1, uid, uprofile);
-}
-
-static long call_reset_su_path(const char *__user upath)
-{
-    return su_reset_path(strndup_user(upath, SU_PATH_MAX_LEN));
-}
-
-static long call_su_get_path(char *__user ubuf, int buf_len)
-{
-    const char *path = su_get_path();
-    int len = strlen(path);
-    if (buf_len <= len) return -ENOBUFS;
-    return compat_copy_to_user(ubuf, path, len + 1);
-}
-
-static long call_su_get_allow_sctx(char *__user usctx, int ulen)
-{
-    int len = strlen(all_allow_sctx);
-    if (ulen <= len) return -ENOBUFS;
-    return compat_copy_to_user(usctx, all_allow_sctx, len + 1);
-}
-
-static long call_su_set_allow_sctx(char *__user usctx)
-{
-    char buf[SUPERCALL_SCONTEXT_LEN];
-    buf[0] = '\0';
-    int len = compat_strncpy_from_user(buf, usctx, sizeof(buf));
-    if (len >= SUPERCALL_SCONTEXT_LEN && buf[SUPERCALL_SCONTEXT_LEN - 1]) return -E2BIG;
-    return set_all_allow_sctx(buf);
-}
-
-static long call_kstorage_read(int gid, long did, void *out_data, int offset, int dlen)
-{
-    return read_kstorage(gid, did, out_data, offset, dlen, true);
-}
-
-static long call_kstorage_write(int gid, long did, void *data, int offset, int dlen)
-{
-    return write_kstorage(gid, did, data, offset, dlen, true);
-}
-
-static long call_list_kstorage_ids(int gid, long *ids, int ids_len)
-{
-    return list_kstorage_ids(gid, ids, ids_len, false);
-}
-
-static long call_kstorage_remove(int gid, long did)
-{
-    return remove_kstorage(gid, did);
-}
-
-static long supercall(int is_authed, long cmd, long arg1, long arg2, long arg3, long arg4)
+static long supercall(int is_key_authed, long cmd, long arg1, long arg2, long arg3, long arg4)
 {
     switch (cmd) {
     case SUPERCALL_HELLO:
@@ -286,82 +159,21 @@ static long supercall(int is_authed, long cmd, long arg1, long arg2, long arg3, 
         return kver;
     case SUPERCALL_BUILD_TIME:
         return call_buildtime((char *__user)arg1, (int)arg2);
-    #ifdef ANDROID
-    case SUPERCALL_AP_LOAD_PACKAGE_CONFIG:
-        return call_ap_load_package_config();
-    #endif
-    }
-
-    switch (cmd) {
-    case SUPERCALL_SU:
-        return call_su((struct su_profile * __user) arg1);
-    case SUPERCALL_SU_TASK:
-        return call_su_task((pid_t)arg1, (struct su_profile * __user) arg2);
-
-    case SUPERCALL_SU_GRANT_UID:
-        return call_grant_uid((struct su_profile * __user) arg1);
-    case SUPERCALL_SU_REVOKE_UID:
-        return call_revoke_uid((uid_t)arg1);
-    case SUPERCALL_SU_NUMS:
-        return call_su_allow_uid_nums();
-    case SUPERCALL_SU_LIST:
-        return call_su_list_allow_uid((uid_t *)arg1, (int)arg2);
-    case SUPERCALL_SU_PROFILE:
-        return call_su_allow_uid_profile((uid_t)arg1, (struct su_profile * __user) arg2);
-    case SUPERCALL_SU_RESET_PATH:
-        return call_reset_su_path((const char *)arg1);
-    case SUPERCALL_SU_GET_PATH:
-        return call_su_get_path((char *__user)arg1, (int)arg2);
-    case SUPERCALL_SU_GET_ALLOW_SCTX:
-        return call_su_get_allow_sctx((char *__user)arg1, (int)arg2);
-    case SUPERCALL_SU_SET_ALLOW_SCTX:
-        return call_su_set_allow_sctx((char *__user)arg1);
-
-    case SUPERCALL_KSTORAGE_READ:
-        return call_kstorage_read((int)arg1, (long)arg2, (void *)arg3, (int)((long)arg4 >> 32), (long)arg4 << 32 >> 32);
-    case SUPERCALL_KSTORAGE_WRITE:
-        return call_kstorage_write((int)arg1, (long)arg2, (void *)arg3, (int)((long)arg4 >> 32),
-                                   (long)arg4 << 32 >> 32);
-    case SUPERCALL_KSTORAGE_LIST_IDS:
-        return call_list_kstorage_ids((int)arg1, (long *)arg2, (int)arg3);
-    case SUPERCALL_KSTORAGE_REMOVE:
-        return call_kstorage_remove((int)arg1, (long)arg2);
-
-    case SUPERCALL_CONTROL_FEATURE:
-        return kp_control_feature_sc((const char __user *)arg1, (int)(long)arg2);
-
-#ifdef ANDROID
-    case SUPERCALL_SU_GET_SAFEMODE:
-        return call_su_get_safemode();
-#endif
-    default:
-        break;
-    }
-
-    switch (cmd) {
     case SUPERCALL_BOOTLOG:
         return call_bootlog();
-    case SUPERCALL_PANIC:
-        return call_panic();
-    case SUPERCALL_TEST:
-        return call_test(arg1, arg2, arg3);
     default:
         break;
     }
 
-    if (!is_authed) return -EPERM;
+    if (is_key_authed) return -EPERM;
 
     switch (cmd) {
+    case SUPERCALL_PANIC:
+        return call_panic();
     case SUPERCALL_SKEY_GET:
         return call_skey_get((char *__user)arg1, (int)arg2);
     case SUPERCALL_SKEY_SET:
         return call_skey_set((char *__user)arg1);
-    case SUPERCALL_SKEY_ROOT_ENABLE:
-        return call_skey_root_enable((int)arg1);
-        break;
-    }
-
-    switch (cmd) {
     case SUPERCALL_KPM_LOAD:
         return call_kpm_load((const char *__user)arg1, (const char *__user)arg2, (void *__user)arg3);
     case SUPERCALL_KPM_UNLOAD:
@@ -374,9 +186,6 @@ static long supercall(int is_authed, long cmd, long arg1, long arg2, long arg3, 
         return call_kpm_list((char *__user)arg1, (int)arg2);
     case SUPERCALL_KPM_INFO:
         return call_kpm_info((const char *__user)arg1, (char *__user)arg2, (int)arg3);
-    }
-
-    switch (cmd) {
     default:
         break;
     }
@@ -384,46 +193,24 @@ static long supercall(int is_authed, long cmd, long arg1, long arg2, long arg3, 
     return -ENOSYS;
 }
 
-int is_trusted_manager_uid(uid_t uid)
-{
-    #ifdef ANDROID
-    return is_trusted_manager_uid_android(uid);
-    #endif
-    return 0;
-}
-
 static void before(hook_fargs6_t *args, void *udata)
 {
-    int uid = current_uid();
-    if (get_ap_mod_exclude(uid)) return;
+    uid_t uid = current_uid();
+    if (!is_su_allow_uid(uid)) return;
 
-    int is_trusted_caller = 0;
-    int is_authed = 0;
-    if (has_preset_superkey()) {
-        const char *__user key_user = (const char *__user)syscall_argn(args, 0);
-        
-        char key[MAX_KEY_LEN];
-        long len = compat_strncpy_from_user(key, key_user, MAX_KEY_LEN);
-        if (len <= 0) return;
-        is_authed = !auth_superkey(key);
-        is_trusted_caller = is_authed;
-    }
-    if (is_trusted_manager_uid(uid)) {
-        is_trusted_caller = 1;
-        is_authed = 1;
-    } else if (is_su_allow_uid(uid)) {
-        is_trusted_caller = 1;
-    }
-
-    if (!is_trusted_caller) return;
-
+    const char *__user ukey = (const char *__user)syscall_argn(args, 0);
     long ver_xx_cmd = (long)syscall_argn(args, 1);
+
     long cmd = ver_xx_cmd & 0xFFFF;
     if (cmd < SUPERCALL_HELLO || cmd > SUPERCALL_MAX) return;
 
-    // todo: from 0.10.5
-    // uint32_t ver = (ver_xx_cmd & 0xFFFFFFFF00000000ul) >> 32;
-    // long xx = (ver_xx_cmd & 0xFFFF0000) >> 16;
+    char key[MAX_KEY_LEN];
+    long len = compat_strncpy_from_user(key, ukey, MAX_KEY_LEN);
+    if (len <= 0) return;
+
+    key[sizeof(key) - 1] = '\0';
+
+    int is_key_authed = auth_superkey(key);
 
     long a1 = (long)syscall_argn(args, 2);
     long a2 = (long)syscall_argn(args, 3);
@@ -431,7 +218,7 @@ static void before(hook_fargs6_t *args, void *udata)
     long a4 = (long)syscall_argn(args, 5);
 
     args->skip_origin = 1;
-    args->ret = supercall(is_authed, cmd, a1, a2, a3, a4);
+    args->ret = supercall(is_key_authed, cmd, a1, a2, a3, a4);
 }
 
 int supercall_install()

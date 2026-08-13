@@ -19,7 +19,6 @@
 extern start_preset_t start_preset;
 
 static char *superkey = 0;
-static char *root_superkey = 0;
 
 struct patch_config *patch_config = 0;
 KP_EXPORT_SYMBOL(patch_config);
@@ -35,9 +34,6 @@ static void ensure_kconfig_loaded(void);
 static const char bstr[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
 static uint64_t _rand_next = 1000000007;
-static bool enable_root_key = false;
-static bool superkey_is_user_set = false;
-static bool root_superkey_is_set = false;
 
 int auth_superkey(const char *key)
 {
@@ -45,26 +41,7 @@ int auth_superkey(const char *key)
     for (int i = 0; superkey[i]; i++) {
         rc |= (superkey[i] ^ key[i]);
     }
-    if (!rc) goto out;
 
-    if (!enable_root_key) goto out;
-
-    BYTE hash[SHA256_BLOCK_SIZE];
-    SHA256_CTX ctx;
-    sha256_init(&ctx);
-    sha256_update(&ctx, (const BYTE *)key, lib_strnlen(key, SUPER_KEY_LEN));
-    sha256_final(&ctx, hash);
-    int len = SHA256_BLOCK_SIZE > ROOT_SUPER_KEY_HASH_LEN ? ROOT_SUPER_KEY_HASH_LEN : SHA256_BLOCK_SIZE;
-    rc = lib_memcmp(root_superkey, hash, len);
-
-    static bool first_time = true;
-    if (!rc && first_time) {
-        first_time = false;
-        reset_superkey(key);
-        enable_root_key = false;
-    }
-
-out:
     return !!rc;
 }
 
@@ -76,11 +53,6 @@ void reset_superkey(const char *key)
 #else
     dsb(ish);
 #endif
-}
-
-void enable_auth_root_key(bool enable)
-{
-    enable_root_key = enable;
 }
 
 uint64_t rand_next()
@@ -141,8 +113,7 @@ static int config_not_set_eq(const char *line, const char *next, const char *nam
     int prefix_len = sizeof(prefix) - 1;
     int suffix_len = sizeof(suffix) - 1;
 
-    return next - line == prefix_len + name_len + suffix_len &&
-           !lib_strncmp(line, prefix, prefix_len) &&
+    return next - line == prefix_len + name_len + suffix_len && !lib_strncmp(line, prefix, prefix_len) &&
            !lib_strncmp(line + prefix_len, name, name_len) &&
            !lib_strncmp(line + prefix_len + name_len, suffix, suffix_len);
 }
@@ -234,12 +205,14 @@ static int find_ikconfig_deflate(const uint8_t *gz, int64_t gz_len, const uint8_
         pos += 2 + xlen;
     }
     if (flg & 0x08) { // FNAME, NUL-terminated
-        while (pos < gz + gz_len && *pos) pos++;
+        while (pos < gz + gz_len && *pos)
+            pos++;
         if (pos >= gz + gz_len) return -4;
         pos++;
     }
     if (flg & 0x10) { // FCOMMENT, NUL-terminated
-        while (pos < gz + gz_len && *pos) pos++;
+        while (pos < gz + gz_len && *pos)
+            pos++;
         if (pos >= gz + gz_len) return -5;
         pos++;
     }
@@ -252,8 +225,8 @@ static int find_ikconfig_deflate(const uint8_t *gz, int64_t gz_len, const uint8_
     const uint8_t *trailer = gz + gz_len - 8;
     *deflate_start = pos;
     *deflate_len = (unsigned long)(trailer - pos);
-    *out_len = (unsigned long)((uint32_t)trailer[4] | ((uint32_t)trailer[5] << 8) |
-                               ((uint32_t)trailer[6] << 16) | ((uint32_t)trailer[7] << 24));
+    *out_len = (unsigned long)((uint32_t)trailer[4] | ((uint32_t)trailer[5] << 8) | ((uint32_t)trailer[6] << 16) |
+                               ((uint32_t)trailer[7] << 24));
     return 0;
 }
 
@@ -324,17 +297,9 @@ int on_each_extra_item(int (*callback)(const patch_extra_item_t *extra, const ch
     return rc;
 }
 
-int has_preset_superkey()
-{
-    return superkey_is_user_set || root_superkey_is_set;
-}
-
 void predata_init()
 {
     superkey = (char *)start_preset.superkey;
-    root_superkey = (char *)start_preset.root_superkey;
-    superkey_is_user_set = lib_strnlen(superkey, SUPER_KEY_LEN) > 0;
-    root_superkey_is_set = *(uint64_t *)root_superkey;
     char *compile_time = start_preset.header.compile_time;
 
     // RNG
@@ -345,20 +310,6 @@ void predata_init()
     _rand_next *= _kp_region_end;
     if (*(uint64_t *)compile_time) _rand_next *= *(uint64_t *)compile_time;
     if (*(uint64_t *)(superkey)) _rand_next *= *(uint64_t *)(superkey);
-    if (*(uint64_t *)(root_superkey)) _rand_next *= *(uint64_t *)(root_superkey);
-
-    enable_root_key = false;
-
-    // random key
-    if (!superkey_is_user_set) {
-        enable_root_key = true;
-        int len = SUPER_KEY_LEN > 16 ? 16 : SUPER_KEY_LEN;
-        len--;
-        for (int i = 0; i < len; ++i) {
-            uint64_t rand = rand_next() % (sizeof(bstr) - 1);
-            superkey[i] = bstr[rand];
-        }
-    }
 
     patch_config = &start_preset.patch_config;
 

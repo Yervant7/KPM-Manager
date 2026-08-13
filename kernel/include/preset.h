@@ -14,7 +14,6 @@
 #define MAGIC_LEN 0x8
 #define KP_HEADER_SIZE 0x40
 #define SUPER_KEY_LEN 0x40
-#define ROOT_SUPER_KEY_HASH_LEN 0x20
 #define SETUP_PRESERVE_LEN 0x40
 #define HDR_BACKUP_SIZE 0x8
 #define COMPILE_TIME_LEN 0x18
@@ -201,10 +200,10 @@ typedef int32_t extra_item_type;
 #define PATCH_EXTRA_HEADER_VERSION_MAGIC 0x4B500000U
 #define PATCH_EXTRA_HEADER_VERSION_MASK 0xFFFF0000U
 #define PATCH_EXTRA_HEADER_VERSION_VALUE_MASK 0x0000FFFFU
-#define PATCH_EXTRA_FLAGS_GET_HEADER_VERSION(flags)                                                              \
-    ((((uint32_t)(flags) & PATCH_EXTRA_HEADER_VERSION_MASK) == PATCH_EXTRA_HEADER_VERSION_MAGIC)                \
-         ? ((uint32_t)(flags) & PATCH_EXTRA_HEADER_VERSION_VALUE_MASK)                                          \
-         : PATCH_EXTRA_HEADER_VERSION_LEGACY)
+#define PATCH_EXTRA_FLAGS_GET_HEADER_VERSION(flags)                                                \
+    ((((uint32_t)(flags) & PATCH_EXTRA_HEADER_VERSION_MASK) == PATCH_EXTRA_HEADER_VERSION_MAGIC) ? \
+         ((uint32_t)(flags) & PATCH_EXTRA_HEADER_VERSION_VALUE_MASK) :                             \
+         PATCH_EXTRA_HEADER_VERSION_LEGACY)
 
 struct _patch_extra_item
 {
@@ -273,7 +272,6 @@ typedef struct _setup_preset_t
     map_symbol_t map_symbol;
     uint8_t header_backup[HDR_BACKUP_SIZE];
     uint8_t superkey[SUPER_KEY_LEN];
-    uint8_t root_superkey[ROOT_SUPER_KEY_HASH_LEN];
     int64_t sprintf_offset;
     int64_t symbol_lookup_anchor_offset;
     int64_t kconfig_offset;
@@ -299,12 +297,11 @@ typedef struct _setup_preset_t
 #define setup_map_symbol_offset (setup_printk_offset_offset + 8)
 #define setup_header_backup_offset (setup_map_symbol_offset + MAP_SYMBOL_SIZE)
 #define setup_superkey_offset (setup_header_backup_offset + HDR_BACKUP_SIZE)
-#define setup_root_superkey_offset (setup_superkey_offset + SUPER_KEY_LEN)
-#define setup_sprintf_offset_offset (setup_root_superkey_offset + ROOT_SUPER_KEY_HASH_LEN)
+#define setup_sprintf_offset_offset (setup_superkey_offset + SUPER_KEY_LEN)
 #define setup_symbol_lookup_anchor_offset_offset (setup_sprintf_offset_offset + 8)
 #define setup_kconfig_offset_offset (setup_symbol_lookup_anchor_offset_offset + 8)
 #define setup_kconfig_size_offset (setup_kconfig_offset_offset + 8)
-#define setup_patch_config_offset (setup_root_superkey_offset + ROOT_SUPER_KEY_HASH_LEN + SETUP_PRESERVE_LEN)
+#define setup_patch_config_offset (setup_superkey_offset + SUPER_KEY_LEN + SETUP_PRESERVE_LEN)
 #define setup_end (setup_patch_config_offset + PATCH_CONFIG_LEN)
 #endif
 

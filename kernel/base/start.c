@@ -121,8 +121,7 @@ static void log_kallsyms_lookup_name_unresolved()
     }
 }
 
-static int kallsyms_on_each_match_symbol_cb(void *data, const char *name, struct module *unused_mod,
-                                            unsigned long addr)
+static int kallsyms_on_each_match_symbol_cb(void *data, const char *name, struct module *unused_mod, unsigned long addr)
 {
     struct kallsyms_match_symbol_context *ctx = data;
 

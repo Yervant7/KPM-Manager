@@ -8,6 +8,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <ktypes.h>
 
 #define VERSION(major, minor, patch) (((major) << 16) + ((minor) << 8) + (patch))
 

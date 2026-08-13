@@ -22,7 +22,7 @@ static uintptr_t alias_pte = 0;
 
 int kfunc_def(aarch64_insn_patch_text_nosync)(void *addr, uint32_t insn) = 0;
 
-static void modify_entry_kernel(uintptr_t va, uintptr_t *entry, uintptr_t value)
+void modify_entry_kernel(uintptr_t va, uintptr_t *entry, uintptr_t value)
 {
     if (!pte_valid_cont(*entry) && !pte_valid_cont(value)) {
         *entry = value;
@@ -31,7 +31,8 @@ static void modify_entry_kernel(uintptr_t va, uintptr_t *entry, uintptr_t value)
     }
 
     uintptr_t prot = value & ~table_pa_mask;
-    uintptr_t *p = (uintptr_t *)((uintptr_t)entry & ~(sizeof(entry) * CONT_PTES - 1));
+    uintptr_t block_size = CONT_PTES * sizeof(*entry);
+    uintptr_t *p = (uintptr_t *)((uintptr_t)entry & ~(block_size - 1));
     for (int i = 0; i < CONT_PTES; ++i, ++p) {
         *p = (*p & table_pa_mask) | prot;
     }

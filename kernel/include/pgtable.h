@@ -21,28 +21,28 @@
  *               sets it to make one global.  Opposite sense.
  *   PTE_TYPE_*  x86 has no page/table type field in a leaf entry.
  */
-#define PTE_VALID    (1ul << 0)   /* Present */
-#define PTE_WRITE    (1ul << 1)   /* R/W: set means writable */
-#define PTE_USER     (1ul << 2)   /* U/S */
-#define PTE_AF       (1ul << 5)   /* Accessed */
-#define PTE_DIRTY    (1ul << 6)   /* Dirty */
-#define PTE_GLOBAL   (1ul << 8)   /* Global: not flushed by a CR3 reload */
-#define PTE_PXN      (1ul << 63)  /* NX (No-Execute) */
-#define PTE_SHARED   (0)
-#define PTE_GP       (0)
+#define PTE_VALID (1ul << 0) /* Present */
+#define PTE_WRITE (1ul << 1) /* R/W: set means writable */
+#define PTE_USER (1ul << 2) /* U/S */
+#define PTE_AF (1ul << 5) /* Accessed */
+#define PTE_DIRTY (1ul << 6) /* Dirty */
+#define PTE_GLOBAL (1ul << 8) /* Global: not flushed by a CR3 reload */
+#define PTE_PXN (1ul << 63) /* NX (No-Execute) */
+#define PTE_SHARED (0)
+#define PTE_GP (0)
 #define PTE_TABLE_BIT (1ul << 0)
-#define PTE_CONT     (0)
+#define PTE_CONT (0)
 
 #define pte_valid_cont(pte) 0
 
-#define CONT_PTES      1
-#define CONT_PTE_MASK  (~0ul)
+#define CONT_PTES 1
+#define CONT_PTE_MASK (~0ul)
 
 #define sev() asm volatile("" ::: "memory")
 #define wfe() asm volatile("pause" ::: "memory")
 #define wfi() asm volatile("hlt" ::: "memory")
 
-#define isb()  asm volatile("" ::: "memory")
+#define isb() asm volatile("" ::: "memory")
 #define dmb(opt) asm volatile("mfence" ::: "memory")
 #define dsb(opt) asm volatile("mfence" ::: "memory")
 
@@ -129,12 +129,13 @@ static inline void flush_tlb_kernel_range(uint64_t start, uint64_t end)
         local_flush_tlb_all();
         return;
     }
-    for (uint64_t i = first; i < last; i++) asm volatile("invlpg (%0)" ::"r"(i << 12) : "memory");
+    for (uint64_t i = first; i < last; i++)
+        asm volatile("invlpg (%0)" ::"r"(i << 12) : "memory");
 }
 
 static inline void flush_tlb_kernel_page(uint64_t addr)
 {
-    asm volatile("invlpg (%0)" :: "r"(addr) : "memory");
+    asm volatile("invlpg (%0)" ::"r"(addr) : "memory");
 }
 
 static inline int is_kimg_range(uint64_t addr)
@@ -324,6 +325,8 @@ static inline uint64_t *pgtable_entry_kernel(uint64_t va)
 {
     return pgtable_entry(pgd_va, va);
 }
+
+void modify_entry_kernel(uintptr_t va, uintptr_t *entry, uintptr_t value);
 
 uint64_t pgtable_phys(uint64_t pgd, uint64_t va);
 

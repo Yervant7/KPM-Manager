@@ -72,10 +72,6 @@ BASE_SRCS += $(wildcard patch/common/*.c)
 BASE_SRCS += $(wildcard patch/module/*.c)
 BASE_SRCS += $(wildcard patch/ksyms/*.c)
 
-ifdef ANDROID
-	BASE_SRCS += $(wildcard patch/android/*.c)
-endif
-
 SRCS += $(BASE_SRCS)
 SRCS += $(LINUX_SRCS)
 
@@ -95,6 +91,9 @@ ${TARGET}: ${TARGET}.elf
 
 ${TARGET}.elf: ${OBJS}
 	${LD} -nostdlib -static -no-pie -Tkpimg.lds -o $@ $^
+
+base/fphook.o: CFLAGS += -ffixed-x16
+base/hook.o: CFLAGS += -ffixed-x16
 
 ${X86_TARGET}: ${X86_TARGET}.elf
 	${X86_OBJCOPY} -O binary -S $^ $@
@@ -133,8 +132,6 @@ base/puff/puff.o: base/puff/puff.c
 
 .PHONY: hdr x86
 hdr:
-	cp -Rf patch/include/uapi ../user/
-	cp -f ../version ../user/
 	cp -f include/preset.h ../tools/
 
 x86: hdr ${X86_TARGET}

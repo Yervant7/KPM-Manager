@@ -120,13 +120,6 @@ start_prepare:
     mov x2, #SUPER_KEY_LEN
     bl memcpy8
 
-    // memcpy(start_preset.root_superkey, setup_preset.root_superkey, ROOT_SUPER_KEY_HASH_LEN);
-    mov x3, #start_root_superkey_offset
-    add x0, x11, x3
-    add x1, x10, #setup_root_superkey_offset
-    mov x2, #ROOT_SUPER_KEY_HASH_LEN
-    bl memcpy8
-
     // memcpy(&start_preset.patch_config, &setup_preset.patch_config, sizeof(header.patch_config));
     mov x3, #start_patch_config_offset
     add x0, x11, x3

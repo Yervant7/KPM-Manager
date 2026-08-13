@@ -27,7 +27,7 @@ long kfunc_def(strncpy_from_user)(char *dest, const char __user *src, long count
 
 long kfunc_def(strnlen_user_nofault)(const void __user *unsafe_addr, long count) = 0;
 long kfunc_def(strnlen_unsafe_user)(const void __user *unsafe_addr, long count) = 0;
-long kfunc_def(strnlen_user)(const char __user *str, long n);
+long kfunc_def(strnlen_user)(const char __user *str, long n) = 0;
 
 static void _linux_lib_strncpy_from_user_sym_match(const char *name, unsigned long addr)
 {

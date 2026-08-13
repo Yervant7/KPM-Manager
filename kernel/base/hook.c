@@ -4,10 +4,10 @@
  */
 
 #include <hook.h>
+#include <cache.h>
 #include <io.h>
 #include <symbol.h>
 #include <pgtable.h>
-#include <hotpatch.h>
 #include <kpmalloc.h>
 #include "hmem.h"
 
@@ -118,8 +118,7 @@ static uint64_t branch_func_addr_once(uint64_t addr)
         uint64_t imm26 = bits32(inst, 25, 0);
         uint64_t imm64 = sign64_extend(imm26 << 2u, 28u);
         ret = addr + imm64;
-    } else if (inst == ARM64_BTI_C || inst == ARM64_BTI_J ||
-               (inst == ARM64_BTI_JC && !hook_get_mem_from_origin(addr))) {
+    } else if (inst == ARM64_BTI_C || inst == ARM64_BTI_J || inst == ARM64_BTI_JC) {
         ret = addr + 4;
     } else {
     }
@@ -336,11 +335,12 @@ int32_t branch_from_to(uint32_t *tramp_buf, uint64_t src_addr, uint64_t dst_addr
 // transit0
 typedef uint64_t (*transit0_func_t)();
 
-#define current_inline_hook_chain() ({ \
-    uint64_t chain_va; \
-    asm volatile("mov %0, x16" : "=r"(chain_va)); \
-    (hook_chain_t *)chain_va; \
-})
+#define current_inline_hook_chain()                   \
+    ({                                                \
+        uint64_t chain_va;                            \
+        asm volatile("mov %0, x16" : "=r"(chain_va)); \
+        (hook_chain_t *)chain_va;                     \
+    })
 
 uint64_t __attribute__((section(".transit0.text"))) __attribute__((__noinline__)) _transit0()
 {
@@ -557,8 +557,14 @@ hook_err_t hook_prepare(hook_t *hook)
     for (int i = 0; i < TRAMPOLINE_MAX_NUM; i++) {
         hook->origin_insts[i] = *((uint32_t *)hook->origin_addr + i);
     }
-    // trampline to replace_addr
-    if (hook->origin_insts[0] == ARM64_PACIASP || hook->origin_insts[0] == ARM64_PACIBSP) {
+
+    // Detect PAC preamble (PACIASP/PACIBSP), possibly preceded by BTI.
+    // When present, insert BTI_JC at trampoline head so BR/BLR -> PACIASP works.
+    int pac_offset = 0;
+    if (hook->origin_insts[0] == ARM64_BTI_C || hook->origin_insts[0] == ARM64_BTI_JC) {
+        pac_offset = 1;
+    }
+    if (hook->origin_insts[pac_offset] == ARM64_PACIASP || hook->origin_insts[pac_offset] == ARM64_PACIBSP) {
         hook->tramp_insts_num = branch_absolute(&hook->tramp_insts[1], hook->replace_addr);
         hook->tramp_insts[0] = ARM64_BTI_JC;
         hook->tramp_insts_num++;
@@ -570,6 +576,11 @@ hook_err_t hook_prepare(hook_t *hook)
     for (int i = 0; i < sizeof(hook->relo_insts) / sizeof(hook->relo_insts[0]); i++) {
         hook->relo_insts[i] = ARM64_NOP;
     }
+
+    uint32_t *bti = hook->relo_insts + hook->relo_insts_num;
+    bti[0] = ARM64_BTI_JC;
+    bti[1] = ARM64_NOP;
+    hook->relo_insts_num += 2;
 
     for (int i = 0; i < hook->tramp_insts_num; i++) {
         uint64_t inst_addr = hook->origin_addr + i * 4;
@@ -589,23 +600,35 @@ hook_err_t hook_prepare(hook_t *hook)
 }
 KP_EXPORT_SYMBOL(hook_prepare);
 
+// todo:
 void hook_install(hook_t *hook)
 {
-    void *addrs[TRAMPOLINE_MAX_NUM];
-    for (int32_t i = 0; i < hook->tramp_insts_num; ++i) {
-        addrs[i] = (uint32_t *)hook->origin_addr + i;
+    uint64_t va = hook->origin_addr;
+    uint64_t *entry = pgtable_entry_kernel(va);
+    uint64_t ori_prot = *entry;
+    modify_entry_kernel(va, entry, (ori_prot | PTE_DBM) & ~PTE_RDONLY);
+    // todo: cpu_stop_machine
+    // todo: can use aarch64_insn_patch_text_nosync, aarch64_insn_patch_text directly?
+    for (int32_t i = 0; i < hook->tramp_insts_num; i++) {
+        *((uint32_t *)hook->origin_addr + i) = hook->tramp_insts[i];
     }
-    hotpatch(addrs, hook->tramp_insts, hook->tramp_insts_num);
+    flush_icache_all();
+    modify_entry_kernel(va, entry, ori_prot);
 }
 KP_EXPORT_SYMBOL(hook_install);
 
 void hook_uninstall(hook_t *hook)
 {
-    void *addrs[TRAMPOLINE_MAX_NUM];
-    for (int32_t i = 0; i < hook->tramp_insts_num; ++i) {
-        addrs[i] = (uint32_t *)hook->origin_addr + i;
+    uint64_t va = hook->origin_addr;
+    uint64_t *entry = pgtable_entry_kernel(va);
+    uint64_t ori_prot = *entry;
+    modify_entry_kernel(va, entry, (ori_prot | PTE_DBM) & ~PTE_RDONLY);
+    flush_tlb_kernel_page(va);
+    for (int32_t i = 0; i < hook->tramp_insts_num; i++) {
+        *((uint32_t *)hook->origin_addr + i) = hook->origin_insts[i];
     }
-    hotpatch(addrs, hook->origin_insts, hook->tramp_insts_num);
+    flush_icache_all();
+    modify_entry_kernel(va, entry, ori_prot);
 }
 KP_EXPORT_SYMBOL(hook_uninstall);
 
@@ -681,10 +704,11 @@ static hook_err_t hook_chain_prepare(uint32_t *transit, int32_t argno)
     // todo:assert
     if (transit_num + 6 > TRANSIT_INST_NUM) return -HOOK_TRANSIT_NO_MEM;
 
+    // Build transit header: BTI + load chain address via x16 + skip data pool
     transit[0] = ARM64_BTI_JC;
-    transit[1] = 0x58000070; // LDR X16, #12
-    transit[2] = 0x14000004; // B #16
-    transit[3] = ARM64_NOP;
+    transit[1] = ARM64_LDR_X16_12;
+    transit[2] = ARM64_B_16;
+    transit[3] = ARM64_NOP; // pad to align 8-byte literal pool
     hook_chain_t *chain = local_container_of(transit, hook_chain_t, transit);
     transit[4] = ((uint64_t)chain) & 0xFFFFFFFF;
     transit[5] = ((uint64_t)chain) >> 32u;
@@ -714,7 +738,8 @@ hook_err_t hook_chain_add(hook_chain_t *chain, void *before, void *after, void *
             }
             dsb(ish);
             chain->states[i] = CHAIN_ITEM_STATE_READY;
-            logkv("Wrap chain add: %llx, %llx, %llx successed\n", chain->hook.func_addr, (uint64_t)before, (uint64_t)after);
+            logkv("Wrap chain add: %llx, %llx, %llx successed\n", chain->hook.func_addr, (uint64_t)before,
+                  (uint64_t)after);
             return HOOK_NO_ERR;
         }
     }
@@ -791,9 +816,10 @@ void hook_unwrap_remove(void *func, void *before, void *after, int remove)
     for (int i = 0; i < HOOK_CHAIN_NUM; i++) {
         if (chain->states[i] != CHAIN_ITEM_STATE_EMPTY) return;
     }
-    hook_chain_uninstall(chain);
+    chain->chain_items_max = 0;
+    // hook_chain_uninstall(chain);
     // todo: unsafe
-    hook_mem_free(chain);
+    // hook_mem_free(chain);
     logkv("Unwrap func: %llx\n", (uint64_t)func);
 }
 KP_EXPORT_SYMBOL(hook_unwrap_remove);

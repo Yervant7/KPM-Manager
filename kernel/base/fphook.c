@@ -7,7 +7,6 @@
 #include <cache.h>
 #include <symbol.h>
 #include <pgtable.h>
-#include <hotpatch.h>
 #include "hmem.h"
 
 // transit0
@@ -196,10 +195,11 @@ static hook_err_t hook_chain_prepare(uint32_t *transit, int32_t argno)
     // todo: assert
     if (transit_num + 6 > TRANSIT_INST_NUM) return -HOOK_TRANSIT_NO_MEM;
 
+    // Build transit header: BTI + load chain address via x16 + skip data pool
     transit[0] = ARM64_BTI_JC;
-    transit[1] = 0x58000070; // LDR X16, #12
-    transit[2] = 0x14000004; // B #16
-    transit[3] = ARM64_NOP;
+    transit[1] = ARM64_LDR_X16_12;
+    transit[2] = ARM64_B_16;
+    transit[3] = ARM64_NOP; // pad to align 8-byte literal pool
     fp_hook_chain_t *chain = local_container_of(transit, fp_hook_chain_t, transit);
     transit[4] = ((uint64_t)chain) & 0xFFFFFFFF;
     transit[5] = ((uint64_t)chain) >> 32u;
@@ -211,20 +211,27 @@ static hook_err_t hook_chain_prepare(uint32_t *transit, int32_t argno)
 
 void fp_hook(uintptr_t fp_addr, void *replace, void **backup)
 {
+    uint64_t *entry = pgtable_entry_kernel(fp_addr);
+    uint64_t ori_prot = *entry;
+    modify_entry_kernel(fp_addr, entry, (ori_prot | PTE_DBM) & ~PTE_RDONLY);
+    flush_tlb_kernel_page(fp_addr);
     *(uintptr_t *)backup = *(uintptr_t *)fp_addr;
-    uintptr_t addrs[2];
-    addrs[0] = fp_addr;
-    addrs[1] = fp_addr + 4;
-    hotpatch((void **)addrs, (uint32_t *)&replace, 2);
+    *(uintptr_t *)fp_addr = (uintptr_t)replace;
+    dsb(ish);
+    modify_entry_kernel(fp_addr, entry, ori_prot);
 }
 KP_EXPORT_SYMBOL(fp_hook);
 
 void fp_unhook(uintptr_t fp_addr, void *backup)
 {
-    uintptr_t addrs[2];
-    addrs[0] = fp_addr;
-    addrs[1] = fp_addr + 4;
-    hotpatch((void **)addrs, (uint32_t *)&backup, 2);
+    uint64_t *entry = pgtable_entry_kernel(fp_addr);
+    uint64_t ori_prot = *entry;
+    modify_entry_kernel(fp_addr, entry, (ori_prot | PTE_DBM) & ~PTE_RDONLY);
+    *(uintptr_t *)fp_addr = (uintptr_t)backup;
+    dsb(ish);
+    isb();
+    flush_icache_all();
+    modify_entry_kernel(fp_addr, entry, ori_prot);
 }
 KP_EXPORT_SYMBOL(fp_unhook);
 
@@ -291,9 +298,10 @@ void fp_hook_unwrap(uintptr_t fp_addr, void *before, void *after)
     for (int i = 0; i < FP_HOOK_CHAIN_NUM; i++) {
         if (chain->states[i] != CHAIN_ITEM_STATE_EMPTY) return;
     }
-    fp_unhook(chain->hook.fp_addr, (void *)chain->hook.origin_fp);
+    chain->chain_items_max = 0;
+    // fp_unhook(chain->hook.fp_addr, (void *)chain->hook.origin_fp);
     // todo: unsafe
-    hook_mem_free(chain);
+    // hook_mem_free(chain);
     logkv("Unwrap func pointer: %llx, %llx, %llx\n", fp_addr, before, after);
 }
 KP_EXPORT_SYMBOL(fp_hook_unwrap);
