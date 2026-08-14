@@ -44,7 +44,9 @@ typedef int8_t chain_item_state;
 #define RELOCATE_INST_NUM (TRAMPOLINE_MAX_NUM * 8 + 8)
 
 #define HOOK_CHAIN_NUM 0x10
-#define TRANSIT_INST_NUM 0x60
+/* GCC 14 emits a ~100-instruction _transit12 (12-arg hook chain); 0x60 left it
+ * overflowing the buffer and hook_chain_prepare failed with -HOOK_TRANSIT_NO_MEM. */
+#define TRANSIT_INST_NUM 0x70
 
 /*
  * Transit buffer header layout:
