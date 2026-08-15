@@ -8,6 +8,7 @@
 #include <ksyms.h>
 #include <symbol.h>
 #include <pgtable.h>
+#include <baselib.h>
 #include <asm/atomic.h>
 #include <linux/cpumask.h>
 #include <linux/vmalloc.h>
@@ -23,11 +24,16 @@ static uintptr_t alias_pte = 0;
 int kfunc_def(aarch64_insn_patch_text_nosync)(void *addr, uint32_t insn) = 0;
 
 bool use_hotpatch = false;
-EXPORT_SYMBOL(use_hotpatch);
+KP_EXPORT_SYMBOL(use_hotpatch);
 
 struct device_node;
 const void * kfunc_def(of_get_property)(const struct device_node *np, const char *name, int *lenp) = 0;
-const struct device_node ** kvar_def(of_root) = 0;
+struct device_node ** kvar_def(of_root) = 0;
+
+static inline const void * of_get_property(const struct device_node *np, const char *name, int *lenp)
+{
+    kfunc_direct_call(of_get_property, np, name, lenp);
+}
 
 static bool is_incompatible_soc()
 {
@@ -40,8 +46,8 @@ static bool is_incompatible_soc()
         return false;
     }
 
-    kvar_lookup_name("of_root");
-    kfunc_lookup_name("of_get_property");
+    kvar_lookup_name(of_root);
+    kfunc_lookup_name(of_get_property);
     if (!kv_of_root || !kf_of_get_property) {
         log_boot("of_root or of_get_property not found\n");
         return false;
@@ -52,15 +58,15 @@ static bool is_incompatible_soc()
     if (!p_of_root || !*p_of_root)
         return false;
 
-    compat_buf = (const char *)kfunc_direct_call(of_get_property, *p_of_root, "compatible", &len);
+    compat_buf = (const char *)of_get_property(*p_of_root, "compatible", &len);
     if (!compat_buf || len <= 0)
         return false;
 
     while (len > 0) {
-        if (strstr(compat_buf, "mediatek,") || strstr(compat_buf, "mtk,"))
+        if (lib_strstr(compat_buf, "mediatek,") || lib_strstr(compat_buf, "mtk,"))
             return true;
 
-        int str_len = strlen(compat_buf) + 1;
+        int str_len = lib_strlen(compat_buf) + 1;
         compat_buf += str_len;
         len -= str_len;
     }

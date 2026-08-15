@@ -36,5 +36,6 @@ char *lib_strpbrk(const char *s1, const char *s2);
 char *lib_strrchr(const char *s, int c);
 char *lib_strsep(char **stringp, const char *delim);
 size_t lib_strspn(const char *s1, const char *s2);
+char *lib_strstr(const char *haystack, const char *needle);
 
 #endif
