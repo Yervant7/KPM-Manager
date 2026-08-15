@@ -326,14 +326,14 @@ static inline uint64_t *pgtable_entry_kernel(uint64_t va)
     return pgtable_entry(pgd_va, va);
 }
 
-void modify_entry_kernel(uintptr_t va, uintptr_t *entry, uintptr_t value);
-
 uint64_t pgtable_phys(uint64_t pgd, uint64_t va);
 
 static inline uint64_t pgtable_phys_kernel(uint64_t va)
 {
     return pgtable_phys(pgd_va, va);
 }
+
+void modify_entry_kernel(uintptr_t va, uintptr_t *entry, uintptr_t value);
 
 #endif /* CONFIG_X86_64 */
 

@@ -22,6 +22,52 @@ static uintptr_t alias_pte = 0;
 
 int kfunc_def(aarch64_insn_patch_text_nosync)(void *addr, uint32_t insn) = 0;
 
+bool use_hotpatch = false;
+EXPORT_SYMBOL(use_hotpatch);
+
+struct device_node;
+const void * kfunc_def(of_get_property)(const struct device_node *np, const char *name, int *lenp) = 0;
+const struct device_node ** kvar_def(of_root) = 0;
+
+static bool is_incompatible_soc()
+{
+    struct device_node **p_of_root;
+    const char *compat_buf;
+    int len = 0;
+
+    if (kver < VERSION(6, 1, 0)) {
+        // earlier than 6.1 is probably compatible.
+        return false;
+    }
+
+    kvar_lookup_name("of_root");
+    kfunc_lookup_name("of_get_property");
+    if (!kv_of_root || !kf_of_get_property) {
+        log_boot("of_root or of_get_property not found\n");
+        return false;
+    }
+
+    p_of_root = kvar_val(of_root);
+
+    if (!p_of_root || !*p_of_root)
+        return false;
+
+    compat_buf = (const char *)kfunc_direct_call(of_get_property, *p_of_root, "compatible", &len);
+    if (!compat_buf || len <= 0)
+        return false;
+
+    while (len > 0) {
+        if (strstr(compat_buf, "mediatek,") || strstr(compat_buf, "mtk,"))
+            return true;
+
+        int str_len = strlen(compat_buf) + 1;
+        compat_buf += str_len;
+        len -= str_len;
+    }
+
+    return false;
+}
+
 void modify_entry_kernel(uintptr_t va, uintptr_t *entry, uintptr_t value)
 {
     if (!pte_valid_cont(*entry) && !pte_valid_cont(value)) {
@@ -31,8 +77,7 @@ void modify_entry_kernel(uintptr_t va, uintptr_t *entry, uintptr_t value)
     }
 
     uintptr_t prot = value & ~table_pa_mask;
-    uintptr_t block_size = CONT_PTES * sizeof(*entry);
-    uintptr_t *p = (uintptr_t *)((uintptr_t)entry & ~(block_size - 1));
+    uintptr_t *p = (uintptr_t *)((uintptr_t)entry & ~(sizeof(entry) * CONT_PTES - 1));
     for (int i = 0; i < CONT_PTES; ++i, ++p) {
         *p = (*p & table_pa_mask) | prot;
     }
@@ -153,5 +198,9 @@ int hotpatch_init()
     }
     log_boot("alias_page: %llx\n", alias_page);
     log_boot("alias_pte: %llx\n", alias_pte);
+
+    use_hotpatch = !is_incompatible_soc();
+    if (!use_hotpatch) log_boot("Using hotpatch is not compatible with this device\n");
+
     return 0;
 }
