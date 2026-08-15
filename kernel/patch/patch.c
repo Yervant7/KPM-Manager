@@ -50,6 +50,10 @@ int supercall_install();
 void module_init();
 void syscall_init();
 
+#ifdef ANDROID
+int android_user_init();
+#endif
+
 static void before_rest_init(hook_fargs4_t *args, void *udata)
 {
     int rc = 0;
@@ -72,6 +76,11 @@ static void before_rest_init(hook_fargs4_t *args, void *udata)
 
     rc = resolve_pt_regs();
     log_boot("resolve_pt_regs done: %d\n", rc);
+
+#ifdef ANDROID
+    rc = android_user_init();
+    log_boot("android_user_init done: %d\n", rc);
+#endif
 
 out:
     return;

@@ -31,8 +31,6 @@ static int kconfig_scan_done = 0;
 
 static void ensure_kconfig_loaded(void);
 
-static const char bstr[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-
 static uint64_t _rand_next = 1000000007;
 
 int auth_superkey(const char *key)
