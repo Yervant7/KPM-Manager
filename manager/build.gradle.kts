@@ -4,16 +4,15 @@ plugins {
     alias(libs.plugins.kotlin.compose.compiler) apply false
 }
 
-project.ext.set("kpmmVersion", "1.3.2")
+project.ext.set("kpmmVersion", "v1.3.2")
 
-val androidMinSdkVersion by extra(26)
-val androidTargetSdkVersion by extra(36)
-val androidCompileSdkVersion by extra(36)
-val androidBuildToolsVersion by extra("36.1.0")
-val androidCompileNdkVersion by extra("29.0.14206865")
-val managerVersionCode by extra(getVersionCode())
-val managerVersionName by extra(getVersionName())
-val branchName by extra(getBranch())
+project.ext.set("androidMinSdkVersion", 26)
+project.ext.set("androidTargetSdkVersion", 37)
+project.ext.set("androidCompileSdkVersion", 37)
+project.ext.set("androidBuildToolsVersion", "37.0.0")
+project.ext.set("androidCompileNdkVersion", "29.0.14206865")
+project.ext.set("managerVersionCode", getVersionCode())
+project.ext.set("managerVersionName", getVersionName())
 fun Project.exec(command: String) = providers.exec {
     commandLine(command.split(" "))
 }.standardOutput.asText.get().trim()
@@ -42,7 +41,7 @@ fun getVersionName(): String {
 
 tasks.register("printVersion") {
     doLast {
-        println("Version code: $managerVersionCode")
-        println("Version name: $managerVersionName")
+        println("Version code: ${getVersionCode()}")
+        println("Version name: ${getVersionName()}")
     }
 }

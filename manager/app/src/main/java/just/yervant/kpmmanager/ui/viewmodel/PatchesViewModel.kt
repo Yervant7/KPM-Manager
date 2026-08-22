@@ -30,6 +30,7 @@ import just.yervant.kpmmanager.util.copyAndClose
 import just.yervant.kpmmanager.util.copyAndCloseOut
 import just.yervant.kpmmanager.util.inputStream
 import just.yervant.kpmmanager.util.writeTo
+import just.yervant.kpmmanager.util.AnyKernelHelper
 import org.ini4j.Ini
 import java.io.File
 import java.io.FileNotFoundException
@@ -56,6 +57,10 @@ class PatchesViewModel : ViewModel() {
     var newExtras = mutableStateListOf<KPModel.IExtraInfo>()
     var newExtrasFileName = mutableListOf<String>()
 
+    var isAnyKernel by mutableStateOf(false)
+    var ak3KernelFileName by mutableStateOf("")
+    private var ak3KernelInfo: AnyKernelHelper.KernelFileInfo? = null
+
     var running by mutableStateOf(false)
     var patching by mutableStateOf(false)
     var patchdone by mutableStateOf(false)
@@ -66,6 +71,9 @@ class PatchesViewModel : ViewModel() {
 
     private val patchDir: ExtendedFile = FileSystemManager.getLocal().getFile(kpmmApp.filesDir.parent, "patch")
     private var srcBoot: ExtendedFile = patchDir.getChildFile("boot.img")
+    private val ak3Dir: File get() = File(patchDir.path, "ak3")
+    private val rawKernelFile: File get() = File(patchDir.path, "kernel_raw")
+    private val patchedKernelFile: File get() = File(patchDir.path, "kernel_patched")
     private var prepared: Boolean = false
 
     private fun prepare() {
@@ -80,7 +88,7 @@ class PatchesViewModel : ViewModel() {
         patchDir.mkdirs()
 
         tempFile?.let {
-            it.inputStream().copyAndCloseOut(savedBoot!!.newOutputStream())
+            it.inputStream().copyAndCloseOut(savedBoot.newOutputStream())
         }
 
         val execs = listOf(
@@ -102,13 +110,24 @@ class PatchesViewModel : ViewModel() {
         for (script in listOf(
             "boot_patch.sh", "boot_unpatch.sh", "boot_extract.sh", "util_functions.sh", "kpimg"
         )) {
-            val dest = File(patchDir, script)
-            kpmmApp.assets.open(script).writeTo(dest)
+            val dest = File(patchDir.path, script)
+            try {
+                kpmmApp.assets.open(script).writeTo(dest)
+            } catch (e: Exception) {
+                Log.w(TAG, "Asset not found: $script: $e")
+                if (script == "kpimg") {
+                    error += "kpimg asset not found. Please build or install with kpimg asset.\n"
+                }
+            }
         }
 
     }
 
     private fun parseKpimg() {
+        val kpimgFile = File(patchDir.path, "kpimg")
+        if (!kpimgFile.exists()) {
+            return
+        }
         val result = Shell.cmd("cd $patchDir", "./kptools -l -k kpimg").exec()
 
         if (result.isSuccess) {
@@ -129,11 +148,10 @@ class PatchesViewModel : ViewModel() {
         }
     }
 
-    private fun parseBootimg(bootimg: String) {
+    private fun parseKernelImage(kernelPath: String) {
         val result = Shell.cmd(
             "cd $patchDir",
-            "./kptools unpacknolog $bootimg",
-            "./kptools -l -i kernel",
+            "./kptools -l -i \"$kernelPath\"",
         ).exec()
         if (result.isSuccess) {
             val ini = Ini(StringReader(result.out.joinToString("\n")))
@@ -191,14 +209,59 @@ class PatchesViewModel : ViewModel() {
         }
     }
 
+    private fun parseBootimg(bootimg: String) {
+        val result = Shell.cmd(
+            "cd $patchDir",
+            "./kptools unpacknolog \"$bootimg\"",
+        ).exec()
+        if (result.isSuccess) {
+            parseKernelImage("kernel")
+        } else {
+            error += result.err.joinToString("\n")
+        }
+    }
+
     val checkSuperKeyValidation: (superKey: String) -> Boolean = { superKey ->
         superKey.length in 8..63 && superKey.any { it.isDigit() } && superKey.any { it.isLetter() }
     }
 
-    fun copyAndParseBootimg(uri: Uri) {
-        viewModelScope.launch(Dispatchers.IO) {
-            if (running) return@launch
-            running = true
+    private fun copyAndParseBootimgInternal(uri: Uri) {
+        error = ""
+        val isAk3 = AnyKernelHelper.isAnyKernelZip(kpmmApp, uri)
+        if (isAk3) {
+            isAnyKernel = true
+            val extracted = try {
+                kpmmApp.contentResolver.openInputStream(uri)?.use { input ->
+                    AnyKernelHelper.extractZip(input, ak3Dir)
+                } ?: false
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to extract AnyKernel3 zip: $e")
+                false
+            }
+
+            if (extracted) {
+                val kernelInfo = AnyKernelHelper.findKernelFile(ak3Dir)
+                if (kernelInfo != null) {
+                    ak3KernelInfo = kernelInfo
+                    ak3KernelFileName = kernelInfo.name
+                    val preparedKernel = AnyKernelHelper.prepareRawKernel(
+                        kernelInfo,
+                        rawKernelFile,
+                        File(patchDir.path)
+                    )
+                    if (preparedKernel && rawKernelFile.exists()) {
+                        parseKernelImage(rawKernelFile.absolutePath)
+                    } else {
+                        error = "Failed to prepare kernel from AnyKernel3 zip\n"
+                    }
+                } else {
+                    error = "No supported kernel image found in AnyKernel3 zip\n"
+                }
+            } else {
+                error = "Failed to extract AnyKernel3 zip\n"
+            }
+        } else {
+            isAnyKernel = false
             try {
                 uri.inputStream().buffered().use { src ->
                     srcBoot.also {
@@ -209,6 +272,14 @@ class PatchesViewModel : ViewModel() {
                 Log.e(TAG, "copy boot image error: $e")
             }
             parseBootimg(srcBoot.path)
+        }
+    }
+
+    fun copyAndParseBootimg(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (running) return@launch
+            running = true
+            copyAndParseBootimgInternal(uri)
             running = false
         }
     }
@@ -241,20 +312,36 @@ class PatchesViewModel : ViewModel() {
         } else {
             error = result.err.joinToString("\n")
         }
-        running = false
     }
 
-    fun prepare(mode: PatchMode) {
+    fun prepare(mode: PatchMode, uri: Uri? = null) {
         viewModelScope.launch(Dispatchers.IO) {
             if (prepared) return@launch
             prepared = true
 
             running = true
+            error = ""
+            patchLog = ""
+            patching = false
+            patchdone = false
+            needReboot = false
+            isAnyKernel = false
+            ak3KernelFileName = ""
+            ak3KernelInfo = null
+            bootSlot = ""
+            bootDev = ""
+            kimgInfo = KPModel.KImgInfo(banner = "", patched = false)
+            existedExtras.clear()
+            newExtras.clear()
+            newExtrasFileName.clear()
+
             prepare()
             if (mode != PatchMode.UNPATCH) {
                 parseKpimg()
             }
-            if (mode == PatchMode.PATCH_AND_INSTALL || mode == PatchMode.UNPATCH || mode == PatchMode.INSTALL_TO_NEXT_SLOT) {
+            if (uri != null) {
+                copyAndParseBootimgInternal(uri)
+            } else if (mode == PatchMode.PATCH_AND_INSTALL || mode == PatchMode.UNPATCH || mode == PatchMode.INSTALL_TO_NEXT_SLOT) {
                 extractAndParseBootimg(mode)
             }
             running = false
@@ -362,6 +449,119 @@ class PatchesViewModel : ViewModel() {
             logs.add("****************************")
 
             var succ = false
+
+            if (isAnyKernel) {
+                logs.add("- Patching AnyKernel3 kernel image...")
+                val superkey = if (useKey && this@PatchesViewModel.superkey.isNotEmpty()) this@PatchesViewModel.superkey else "su"
+                val patchCommand = mutableListOf("./kptools", "-p", "-i", rawKernelFile.absolutePath, "-k", "kpimg", "-s", superkey, "-o", patchedKernelFile.absolutePath)
+
+                for (i in newExtrasFileName.indices) {
+                    patchCommand.addAll(listOf("-M", newExtrasFileName[i]))
+                    val extra = newExtras[i]
+                    if (extra.args.isNotEmpty()) {
+                        patchCommand.addAll(listOf("-A", extra.args))
+                    }
+                    if (extra.event.isNotEmpty()) {
+                        patchCommand.addAll(listOf("-V", extra.event))
+                    }
+                    patchCommand.addAll(listOf("-T", extra.type.desc))
+                }
+                for (i in existedExtras.indices) {
+                    val extra = existedExtras[i]
+                    patchCommand.addAll(listOf("-E", extra.name))
+                    if (extra.args.isNotEmpty()) {
+                        patchCommand.addAll(listOf("-A", extra.args))
+                    }
+                    if (extra.event.isNotEmpty()) {
+                        patchCommand.addAll(listOf("-V", extra.event))
+                    }
+                    patchCommand.addAll(listOf("-T", extra.type.desc))
+                }
+
+                val commandString = patchCommand.joinToString(" ") {
+                    if (it.contains(" ") || it.contains("$") || it.contains("\"")) {
+                        "\"" + it.replace("\"", "\\\"").replace("$", "\\$") + "\""
+                    } else {
+                        it
+                    }
+                }
+
+                val result = Shell.cmd(
+                    "export ASH_STANDALONE=1",
+                    "cd $patchDir",
+                    commandString
+                ).to(logs, logs).exec()
+
+                if (!result.isSuccess || !patchedKernelFile.exists()) {
+                    val msg = " Patching kernel image failed."
+                    error = msg
+                    logs.add(error)
+                    logs.add("****************************")
+                    patching = false
+                    return@launch
+                }
+
+                logs.add("- Updating kernel inside AnyKernel3...")
+                val repacked = ak3KernelInfo?.let {
+                    AnyKernelHelper.repackPatchedKernel(patchedKernelFile, it, File(patchDir.path))
+                } ?: false
+
+                if (!repacked) {
+                    error = "Failed to update AnyKernel3 kernel file."
+                    logs.add(error)
+                    logs.add("****************************")
+                    patching = false
+                    return@launch
+                }
+
+                if (mode == PatchMode.PATCH_ONLY) {
+                    val outFilename = "kpmm_patched_ak3_${apVer}_${Version.buildKpmmVString()}_${rand}.zip"
+                    val outZipFile = File(patchDir.path, outFilename)
+                    logs.add("- Building patched AnyKernel3 zip...")
+                    val zipCreated = AnyKernelHelper.createPatchedZip(ak3Dir, outZipFile)
+                    if (!zipCreated || !outZipFile.exists()) {
+                        error = "Failed to create patched zip."
+                        logs.add(error)
+                        logs.add("****************************")
+                        patching = false
+                        return@launch
+                    }
+
+                    val outDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                    if (!outDir.exists()) outDir.mkdirs()
+                    val outPath = File(outDir, outFilename)
+                    val inputUri = outZipFile.getUri(kpmmApp)
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        val outUri = createDownloadUri(kpmmApp, outFilename)
+                        succ = insertDownload(kpmmApp, outUri, inputUri)
+                    } else {
+                        outZipFile.inputStream().copyAndClose(outPath.outputStream())
+                        succ = true
+                    }
+                    if (succ) {
+                        logs.add("- Patched AnyKernel3 zip generated successfully!")
+                        logs.add(" Output file is written to ")
+                        logs.add(" ${outPath.path}")
+                    } else {
+                        logs.add(" Write patched AnyKernel3 zip failed")
+                    }
+                } else if (mode == PatchMode.PATCH_AND_INSTALL || mode == PatchMode.INSTALL_TO_NEXT_SLOT) {
+                    val flashSucc = AnyKernelHelper.flashAnyKernel(ak3Dir, File(patchDir.path), logs)
+                    if (flashSucc) {
+                        logs.add("- Installation successful! Reboot to apply.")
+                        needReboot = true
+                    } else {
+                        error = " AnyKernel3 installation failed."
+                        logs.add(error)
+                    }
+                }
+                logs.add("****************************")
+                patchdone = true
+                patching = false
+                return@launch
+            }
+
             var patchCommand = mutableListOf("./busybox", "sh", "boot_patch.sh")
 
             val superkey = if (useKey && this@PatchesViewModel.superkey.isNotEmpty()) this@PatchesViewModel.superkey else "su"
@@ -478,9 +678,10 @@ class PatchesViewModel : ViewModel() {
 
     @RequiresApi(Build.VERSION_CODES.Q)
     fun createDownloadUri(context: Context, outFilename: String): Uri? {
+        val mimeType = if (outFilename.endsWith(".zip")) "application/zip" else "application/octet-stream"
         val contentValues = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, outFilename)
-            put(MediaStore.Downloads.MIME_TYPE, "application/octet-stream")
+            put(MediaStore.Downloads.MIME_TYPE, mimeType)
             put(MediaStore.Downloads.IS_PENDING, 1)
         }
 

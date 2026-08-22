@@ -80,6 +80,11 @@ sealed class InstallMethod {
             get() = R.string.mode_select_page_patch_and_install
     }
 
+    data object DirectInstallAnyKernel : InstallMethod() {
+        override val label: Int
+            get() = R.string.mode_select_page_install_anykernel
+    }
+
     data object DirectInstallToInactiveSlot : InstallMethod() {
         override val label: Int
             get() = R.string.mode_select_page_install_inactive_slot
@@ -101,6 +106,7 @@ private fun SelectInstallMethod(
         mutableListOf<InstallMethod>(InstallMethod.SelectFile())
     if (rootAvailable) {
         radioOptions.add(InstallMethod.DirectInstall)
+        radioOptions.add(InstallMethod.DirectInstallAnyKernel)
         if (isAbDevice) {
             radioOptions.add(InstallMethod.DirectInstallToInactiveSlot)
         }
@@ -121,6 +127,19 @@ private fun SelectInstallMethod(
         }
     }
 
+    val selectAk3Launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (it.resultCode == Activity.RESULT_OK) {
+            it.data?.data?.let { uri ->
+                selectedOption = InstallMethod.DirectInstallAnyKernel
+                onSelected(InstallMethod.DirectInstallAnyKernel)
+                selectedBootImage = uri
+                navigator.navigate(PatchesDestination(PatchesViewModel.PatchMode.PATCH_AND_INSTALL))
+            }
+        }
+    }
+
     val confirmDialog = rememberConfirmDialog(onConfirm = {
         selectedOption = InstallMethod.DirectInstallToInactiveSlot
         onSelected(InstallMethod.DirectInstallToInactiveSlot)
@@ -136,7 +155,8 @@ private fun SelectInstallMethod(
                 selectedBootImage = null
                 selectImageLauncher.launch(
                     Intent(Intent.ACTION_GET_CONTENT).apply {
-                        type = "application/octet-stream"
+                        type = "*/*"
+                        putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/octet-stream", "application/zip", "application/x-zip-compressed"))
                     }
                 )
             }
@@ -144,10 +164,22 @@ private fun SelectInstallMethod(
             is InstallMethod.DirectInstall -> {
                 selectedOption = option
                 onSelected(option)
+                selectedBootImage = null
                 navigator.navigate(PatchesDestination(PatchesViewModel.PatchMode.PATCH_AND_INSTALL))
             }
 
+            is InstallMethod.DirectInstallAnyKernel -> {
+                selectedBootImage = null
+                selectAk3Launcher.launch(
+                    Intent(Intent.ACTION_GET_CONTENT).apply {
+                        type = "*/*"
+                        putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"))
+                    }
+                )
+            }
+
             is InstallMethod.DirectInstallToInactiveSlot -> {
+                selectedBootImage = null
                 confirmDialog.showConfirm(dialogTitle, dialogContent)
             }
         }

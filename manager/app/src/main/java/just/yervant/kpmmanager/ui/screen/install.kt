@@ -69,7 +69,8 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 
 enum class MODULE_TYPE {
-    KPM
+    KPM,
+    ANYKERNEL3
 }
 
 @Composable
@@ -96,7 +97,9 @@ fun InstallScreen(navigator: DestinationsNavigator, uri: Uri, type: MODULE_TYPE)
         }
         withContext(Dispatchers.IO) {
             installModule(uri, type, onFinish = { success ->
-                if (!success) return@installModule
+                if (success) {
+                    showFloatAction = true
+                }
             }, onStdout = {
                 if (it.startsWith("[H[J")) { // clear command
                     text = it.substring(5)

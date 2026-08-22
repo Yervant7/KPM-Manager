@@ -84,6 +84,8 @@
     <string name="patch_item_bootimg">bootimg</string>
     <string name="patch_item_bootimg_slot">Slot:</string>
     <string name="patch_item_bootimg_dev">Device:</string>
+    <string name="patch_item_anykernel">AnyKernel3</string>
+    <string name="patch_item_ak3_kernel_file">Kernel file:</string>
     <string name="patch_item_kernel">Kernel</string>
     <string name="patch_item_kpimg">kpimg</string>
     <string name="patch_item_kpimg_version">Version:</string>
@@ -196,7 +198,8 @@
 
     <string name="mode_select_page_title">Install</string>
     <string name="mode_select_page_patch_and_install">Patch and install</string>
-    <string name="mode_select_page_select_file">Select a boot image to patch</string>
+    <string name="mode_select_page_install_anykernel">Install AnyKernel3 zip</string>
+    <string name="mode_select_page_select_file">Select a boot image or AnyKernel3 zip</string>
     <string name="mode_select_page_install_inactive_slot">Install to inactive slot (After OTA)</string>
     <string name="mode_select_page_install_inactive_slot_warning">Your device will be **FORCED** to boot to the current inactive slot after a reboot!\nOnly use this option after OTA is done.\nContinue?</string>
 

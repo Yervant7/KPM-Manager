@@ -104,8 +104,10 @@ fun Patches(mode: PatchesViewModel.PatchMode) {
     var needKey by rememberSaveable { mutableStateOf(false) }
 
     val viewModel = viewModel<PatchesViewModel>()
-    SideEffect {
-        viewModel.prepare(mode)
+    LaunchedEffect(mode) {
+        val bootUri = selectedBootImage
+        selectedBootImage = null
+        viewModel.prepare(mode, bootUri)
     }
 
     Scaffold(topBar = {
@@ -155,27 +157,20 @@ fun Patches(mode: PatchesViewModel.PatchMode) {
             ErrorView(viewModel.error)
             KernelPatchImageView(viewModel.kpimgInfo)
 
-            if (mode == PatchesViewModel.PatchMode.PATCH_ONLY && selectedBootImage != null && viewModel.kimgInfo.banner.isEmpty()) {
-                viewModel.copyAndParseBootimg(selectedBootImage!!)
-                // Fix endless loop. It's not normal if (parse done && working thread is not working) but banner still null
-                // Leave user re-choose
-                if (!viewModel.running && viewModel.kimgInfo.banner.isEmpty()) {
-                    selectedBootImage = null
-                }
-            }
-
-            // select boot.img
+            // select boot.img or anykernel3.zip
             if (mode == PatchesViewModel.PatchMode.PATCH_ONLY && viewModel.kimgInfo.banner.isEmpty()) {
                 SelectFileButton(
                     text = stringResource(id = R.string.patch_select_bootimg_btn),
                     onSelected = { data, uri ->
-                        Log.d(TAG, "select boot.img, data: $data, uri: $uri")
+                        Log.d(TAG, "select boot.img or anykernel3.zip, data: $data, uri: $uri")
                         viewModel.copyAndParseBootimg(uri)
                     }
                 )
             }
 
-            if (viewModel.bootSlot.isNotEmpty() || viewModel.bootDev.isNotEmpty()) {
+            if (viewModel.isAnyKernel && viewModel.ak3KernelFileName.isNotEmpty()) {
+                AnyKernelView(kernelFileName = viewModel.ak3KernelFileName)
+            } else if (viewModel.bootSlot.isNotEmpty() || viewModel.bootDev.isNotEmpty()) {
                 BootimgView(slot = viewModel.bootSlot, boot = viewModel.bootDev)
             }
 
@@ -566,6 +561,36 @@ private fun KernelPatchImageView(kpImgInfo: KPModel.KPImgInfo) {
             )
             Text(
                 text = stringResource(id = R.string.patch_item_kpimg_config) + " " + kpImgInfo.config,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
+}
+
+@Composable
+private fun AnyKernelView(kernelFileName: String) {
+    ElevatedCard(
+        colors = CardDefaults.elevatedCardColors(containerColor = run {
+            MaterialTheme.colorScheme.secondaryContainer
+        })
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = stringResource(id = R.string.patch_item_anykernel),
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
+            Text(
+                text = "${stringResource(id = R.string.patch_item_ak3_kernel_file)} $kernelFileName",
                 style = MaterialTheme.typography.bodyMedium
             )
         }

@@ -2,6 +2,7 @@
 
 import com.android.build.gradle.tasks.PackageAndroidArtifact
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.net.HttpURLConnection
 import java.net.URI
 
 plugins {
@@ -11,17 +12,14 @@ plugins {
     id("kotlin-parcelize")
 }
 
-val androidCompileSdkVersion: Int by rootProject.extra
-val androidCompileNdkVersion: String by rootProject.extra
-val androidBuildToolsVersion: String by rootProject.extra
-val androidMinSdkVersion: Int by rootProject.extra
-val androidTargetSdkVersion: Int by rootProject.extra
-val androidSourceCompatibility: JavaVersion by rootProject.extra
-val androidTargetCompatibility: JavaVersion by rootProject.extra
-val managerVersionCode: Int by rootProject.extra
-val managerVersionName: String by rootProject.extra
-val branchName: String by rootProject.extra
-val kpmmVersion: String by rootProject.extra
+val androidCompileSdkVersion: Int = rootProject.extra.get("androidCompileSdkVersion") as Int
+val androidCompileNdkVersion: String = rootProject.extra.get("androidCompileNdkVersion") as String
+val androidBuildToolsVersion: String = rootProject.extra.get("androidBuildToolsVersion") as String
+val androidMinSdkVersion: Int = rootProject.extra.get("androidMinSdkVersion") as Int
+val androidTargetSdkVersion: Int = rootProject.extra.get("androidTargetSdkVersion") as Int
+val managerVersionCode: Int = rootProject.extra.get("managerVersionCode") as Int
+val managerVersionName: String = rootProject.extra.get("managerVersionName") as String
+val kpmmVersion: String = rootProject.extra.get("kpmmVersion") as String
 
 val ccache = System.getenv("PATH")?.split(File.pathSeparator)
     ?.map { File(it, "ccache") }?.firstOrNull { it.exists() }?.absolutePath
@@ -112,7 +110,7 @@ android {
             }
         }
         buildConfigField("String", "buildKpmmV", "\"$kpmmVersion\"")
-        base.archivesName = "KPM-Manager_${managerVersionCode}_${managerVersionName}_${branchName}"
+        base.archivesName = "KPM-Manager_${managerVersionCode}_${managerVersionName}"
     }
 
     compileOptions {
@@ -174,14 +172,103 @@ kotlin {
     }
 }
 
+fun openConnectionWithRedirects(initialUrl: String): HttpURLConnection {
+    var urlStr = initialUrl
+    var connection: HttpURLConnection
+    var redirects = 0
+    while (redirects < 10) {
+        val url = URI.create(urlStr).toURL()
+        connection = url.openConnection() as HttpURLConnection
+        connection.instanceFollowRedirects = true
+        connection.connectTimeout = 15000
+        connection.readTimeout = 30000
+        connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+
+        val responseCode = connection.responseCode
+        if (responseCode in 300..399) {
+            val location = connection.getHeaderField("Location")
+            if (!location.isNullOrEmpty()) {
+                val nextUrl = if (location.startsWith("http://") || location.startsWith("https://")) {
+                    location
+                } else {
+                    URI.create(urlStr).resolve(location).toString()
+                }
+                connection.disconnect()
+                urlStr = nextUrl
+                redirects++
+                continue
+            }
+        }
+        if (responseCode !in 200..299) {
+            connection.disconnect()
+            throw GradleException("HTTP error $responseCode when requesting $urlStr")
+        }
+        return connection
+    }
+    throw GradleException("Too many redirects for $initialUrl")
+}
+
+fun isFileUpdated(url: String, localFile: File): Boolean {
+    if (!localFile.exists() || localFile.length() == 0L) return true
+    return try {
+        val connection = openConnectionWithRedirects(url)
+        try {
+            val remoteLastModified = connection.lastModified
+            val remoteContentLength = connection.contentLengthLong
+            if (remoteContentLength > 0 && localFile.length() != remoteContentLength) {
+                true
+            } else if (remoteLastModified > 0L && remoteLastModified > localFile.lastModified()) {
+                true
+            } else {
+                false
+            }
+        } finally {
+            connection.disconnect()
+        }
+    } catch (_: Exception) {
+        false
+    }
+}
+
+fun downloadFile(url: String, destFile: File) {
+    destFile.parentFile?.mkdirs()
+    val tempFile = File(destFile.parentFile, "${destFile.name}.tmp")
+
+    val connection = openConnectionWithRedirects(url)
+    try {
+        connection.inputStream.use { input ->
+            tempFile.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        }
+        if (tempFile.length() == 0L) {
+            tempFile.delete()
+            throw GradleException("Downloaded file is empty: $url")
+        }
+        if (destFile.exists()) {
+            destFile.delete()
+        }
+        if (!tempFile.renameTo(destFile)) {
+            tempFile.copyTo(destFile, overwrite = true)
+            tempFile.delete()
+        }
+    } finally {
+        connection.disconnect()
+        if (tempFile.exists()) {
+            tempFile.delete()
+        }
+    }
+}
+
 fun registerDownloadTask(
     taskName: String, srcUrl: String, destPath: String, project: Project
 ) {
     project.tasks.register(taskName) {
         val destFile = File(destPath)
+        outputs.file(destFile)
 
         doLast {
-            if (!destFile.exists() || isFileUpdated(srcUrl, destFile)) {
+            if (!destFile.exists() || destFile.length() == 0L || isFileUpdated(srcUrl, destFile)) {
                 println(" - Downloading $srcUrl to ${destFile.absolutePath}")
                 downloadFile(srcUrl, destFile)
                 println(" - Download completed.")
@@ -192,33 +279,23 @@ fun registerDownloadTask(
     }
 }
 
-fun isFileUpdated(url: String, localFile: File): Boolean {
-    val connection = URI.create(url).toURL().openConnection()
-    val remoteLastModified = connection.getHeaderFieldDate("Last-Modified", 0L)
-    return remoteLastModified > localFile.lastModified()
-}
-
-fun downloadFile(url: String, destFile: File) {
-    URI.create(url).toURL().openStream().use { input ->
-        destFile.outputStream().use { output ->
-            input.copyTo(output)
-        }
-    }
-}
-
 registerDownloadTask(
     taskName = "downloadKpimg",
-    srcUrl = "https://github.com/yervant7/KPM-Manager/releases/download/$kpmmVersion/kpimg-android",
+    srcUrl = "https://github.com/Yervant7/KPM-Manager/releases/download/$kpmmVersion/kpimg",
     destPath = "${project.projectDir}/src/main/assets/kpimg",
     project = project
 )
 
 registerDownloadTask(
     taskName = "downloadKptools",
-    srcUrl = "https://github.com/yervant7/KPM-Manager/releases/download/$kpmmVersion/kptools-android",
+    srcUrl = "https://github.com/Yervant7/KPM-Manager/releases/download/$kpmmVersion/kptools",
     destPath = "${project.projectDir}/libs/arm64-v8a/libkptools.so",
     project = project
 )
+
+tasks.named("preBuild") {
+    dependsOn("downloadKpimg", "downloadKptools")
+}
 
 ksp {
     arg("compose-destinations.defaultTransitions", "none")

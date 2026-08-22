@@ -95,6 +95,7 @@ import just.yervant.kpmmanager.ui.component.rememberLoadingDialog
 import just.yervant.kpmmanager.ui.viewmodel.KPModel
 import just.yervant.kpmmanager.ui.viewmodel.KPModuleViewModel
 import just.yervant.kpmmanager.ui.viewmodel.PatchesViewModel
+import just.yervant.kpmmanager.util.AnyKernelHelper
 import just.yervant.kpmmanager.util.inputStream
 import just.yervant.kpmmanager.util.ui.APDialogBlurBehindUtils
 import just.yervant.kpmmanager.util.writeTo
@@ -165,7 +166,9 @@ fun KPModuleScreen(navigator: DestinationsNavigator) {
 
                 Log.i(TAG, "select zip result: $uri")
 
-                navigator.navigate(InstallScreenDestination(uri, MODULE_TYPE.KPM))
+                val isAk3 = AnyKernelHelper.isAnyKernelZip(context, uri)
+                val type = if (isAk3) MODULE_TYPE.ANYKERNEL3 else MODULE_TYPE.KPM
+                navigator.navigate(InstallScreenDestination(uri, type))
             }
 
             val selectKpmLauncher = rememberLauncherForActivityResult(
@@ -223,14 +226,14 @@ fun KPModuleScreen(navigator: DestinationsNavigator) {
                                     }
 
                                     moduleInstall -> {
-//                                        val intent = Intent(Intent.ACTION_GET_CONTENT)
-//                                        intent.type = "application/zip"
-//                                        selectZipLauncher.launch(intent)
-                                        Toast.makeText(
-                                            context,
-                                            "Under development",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                        val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                                            type = "*/*"
+                                            putExtra(
+                                                Intent.EXTRA_MIME_TYPES,
+                                                arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")
+                                            )
+                                        }
+                                        selectZipLauncher.launch(intent)
                                     }
 
                                     moduleLoad -> {
