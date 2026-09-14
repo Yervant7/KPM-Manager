@@ -31,7 +31,6 @@ jobs:
           packages: ''
 
       - name: Build with Gradle
-        working-directory: manager
         run: |
           echo 'org.gradle.parallel=true' >> gradle.properties
           echo 'org.gradle.vfs.watch=true' >> gradle.properties
