@@ -2,6 +2,16 @@ name: Build
 
 on:
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag Name (e.g. v2.0.0)'
+        required: true
+        type: string
+      release_title:
+        description: 'Optional Custom Release Title'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: write
@@ -52,8 +62,8 @@ jobs:
         uses: ncipollo/release-action@v1.21.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          name: ${{ env.RELEASE_NAME }}
-          tag: ${{ env.RELEASE }}
+          name: ${{ inputs.release_title != '' && inputs.release_title || format('KPM-Manager {0}', inputs.tag_name) }}
+          tag: ${{ inputs.tag_name }}
           allowUpdates: true
           artifacts: |
             app/build/outputs/apk/release/*.apk
