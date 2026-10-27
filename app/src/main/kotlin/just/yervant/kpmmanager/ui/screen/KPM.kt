@@ -70,7 +70,6 @@ import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
-import com.ramcosta.composedestinations.generated.destinations.InstallScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.PatchesDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.topjohnwu.superuser.nio.ExtendedFile
@@ -92,9 +91,7 @@ import just.yervant.kpmmanager.ui.component.rememberLoadingDialog
 import just.yervant.kpmmanager.ui.viewmodel.KPModel
 import just.yervant.kpmmanager.ui.viewmodel.KPModuleViewModel
 import just.yervant.kpmmanager.ui.viewmodel.PatchesViewModel
-import just.yervant.kpmmanager.util.AnyKernelHelper
 import just.yervant.kpmmanager.util.inputStream
-import just.yervant.kpmmanager.util.removeInstalledKpm
 import just.yervant.kpmmanager.util.ui.APDialogBlurBehindUtils
 import just.yervant.kpmmanager.util.writeTo
 import java.io.IOException
@@ -146,27 +143,10 @@ fun KPModuleScreen(navigator: DestinationsNavigator) {
             val context = LocalContext.current
 
             val moduleLoad = stringResource(id = R.string.kpm_load)
-            val moduleInstall = stringResource(id = R.string.kpm_install)
             val moduleEmbed = stringResource(id = R.string.kpm_embed)
             val successToastText = stringResource(id = R.string.kpm_load_toast_succ)
             val failToastText = stringResource(id = R.string.kpm_load_toast_failed)
             val loadingDialog = rememberLoadingDialog()
-
-            val selectZipLauncher = rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.StartActivityForResult()
-            ) {
-                if (it.resultCode != RESULT_OK) {
-                    return@rememberLauncherForActivityResult
-                }
-                val data = it.data ?: return@rememberLauncherForActivityResult
-                val uri = data.data ?: return@rememberLauncherForActivityResult
-
-                Log.i(TAG, "select zip result: $uri")
-
-                val isAk3 = AnyKernelHelper.isAnyKernelZip(context, uri)
-                val type = if (isAk3) MODULE_TYPE.ANYKERNEL3 else MODULE_TYPE.KPM
-                navigator.navigate(InstallScreenDestination(uri, type))
-            }
 
             val selectKpmLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.StartActivityForResult()
@@ -192,7 +172,7 @@ fun KPModuleScreen(navigator: DestinationsNavigator) {
             }
 
             var expanded by remember { mutableStateOf(false) }
-            val options = listOf(moduleEmbed, moduleInstall, moduleLoad)
+            val options = listOf(moduleEmbed, moduleLoad)
 
             Column {
                 FloatingActionButton(
@@ -220,17 +200,6 @@ fun KPModuleScreen(navigator: DestinationsNavigator) {
                                 when (label) {
                                     moduleEmbed -> {
                                         navigator.navigate(PatchesDestination(PatchesViewModel.PatchMode.PATCH_AND_INSTALL))
-                                    }
-
-                                    moduleInstall -> {
-                                        val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-                                            type = "*/*"
-                                            putExtra(
-                                                Intent.EXTRA_MIME_TYPES,
-                                                arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")
-                                            )
-                                        }
-                                        selectZipLauncher.launch(intent)
                                     }
 
                                     moduleLoad -> {
@@ -434,7 +403,6 @@ private fun KPModuleList(
         val success = loadingDialog.withLoading {
             withContext(Dispatchers.IO) {
                 val unloadRc = Natives.unloadKernelPatchModule(module.name) == 0L
-                removeInstalledKpm(module.name)
                 unloadRc
             }
         }

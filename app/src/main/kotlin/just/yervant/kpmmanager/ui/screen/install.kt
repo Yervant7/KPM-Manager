@@ -1,14 +1,9 @@
 package just.yervant.kpmmanager.ui.screen
 
-import android.content.Context
 import android.net.Uri
 import android.os.Environment
-import android.util.Log
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -16,15 +11,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
@@ -41,7 +32,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.tooling.preview.Preview
@@ -50,32 +40,22 @@ import androidx.lifecycle.compose.dropUnlessResumed
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
-import com.topjohnwu.superuser.io.SuFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import just.yervant.kpmmanager.R
 import just.yervant.kpmmanager.ui.component.KeyEventBlocker
-import just.yervant.kpmmanager.ui.component.rememberCustomDialog
-import just.yervant.kpmmanager.util.installModule
+import just.yervant.kpmmanager.util.installAnykernel
 import just.yervant.kpmmanager.util.reboot
 import just.yervant.kpmmanager.util.ui.LocalSnackbarHost
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.Properties
-import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
-
-enum class MODULE_TYPE {
-    KPM,
-    ANYKERNEL3
-}
 
 @Composable
 @Destination<RootGraph>
-fun InstallScreen(navigator: DestinationsNavigator, uri: Uri, type: MODULE_TYPE) {
+fun InstallScreen(navigator: DestinationsNavigator, uri: Uri) {
     var text by rememberSaveable { mutableStateOf("") }
     val logContent = remember { StringBuilder() }
     var showFloatAction by rememberSaveable { mutableStateOf(false) }
@@ -86,7 +66,6 @@ fun InstallScreen(navigator: DestinationsNavigator, uri: Uri, type: MODULE_TYPE)
         text = if (newText.length > 100_000) newText.takeLast(100_000) else newText
     }
 
-    val context = LocalContext.current
     val snackBarHost = LocalSnackbarHost.current
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
@@ -96,7 +75,7 @@ fun InstallScreen(navigator: DestinationsNavigator, uri: Uri, type: MODULE_TYPE)
             return@LaunchedEffect
         }
         withContext(Dispatchers.IO) {
-            installModule(uri, type, onFinish = { success ->
+            installAnykernel(uri, onFinish = { success ->
                 if (success) {
                     showFloatAction = true
                 }
@@ -125,7 +104,7 @@ fun InstallScreen(navigator: DestinationsNavigator, uri: Uri, type: MODULE_TYPE)
                 val date = format.format(Date())
                 val file = File(
                     Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                    "KPMManager_install_${type}_log_${date}.log"
+                    "KPMManager_install_anykernel3_log_${date}.log"
                 )
                 file.writeText(logContent.toString())
                 snackBarHost.showSnackbar("Log saved to ${file.absolutePath}")

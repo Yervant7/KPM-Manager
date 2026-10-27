@@ -103,9 +103,6 @@ import java.util.Locale
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun SettingScreen() {
-    val state by KPMMApplication.kpStateLiveData.observeAsState(KPMMApplication.State.UNKNOWN_STATE)
-    val kPatchReady = state != KPMMApplication.State.UNKNOWN_STATE
-
     val snackBarHost = LocalSnackbarHost.current
 
     Scaffold(

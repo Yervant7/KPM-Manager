@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.Build
 import android.system.Os
 import com.topjohnwu.superuser.Shell
-import com.topjohnwu.superuser.ShellUtils
 import java.io.File
 import java.io.FileWriter
 import java.io.PrintWriter
@@ -12,7 +11,6 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 fun getBugreportFile(context: Context): File {
-
     val bugreportDir = File(context.cacheDir, "bugreport")
     bugreportDir.mkdirs()
 
@@ -22,7 +20,10 @@ fun getBugreportFile(context: Context): File {
     val dropboxFile = File(bugreportDir, "dropbox.tar.gz")
     val pstoreFile = File(bugreportDir, "pstore.tar.gz")
     val diagFile = File(bugreportDir, "diag.tar.gz")
-    val bootlogFile = File(bugreportDir, "bootlog.tar.gz")
+    val oplusFile = File(bugreportDir, "oplus.tar.gz")
+    val kallsymsFile = File(bugreportDir, "kallsyms.txt")
+    val cpuinfoFile = File(bugreportDir, "cpuinfo.txt")
+    val cmdlineFile = File(bugreportDir, "cmdline.txt")
     val propFile = File(bugreportDir, "props.txt")
     val kernelConfig = File(bugreportDir, "defconfig")
 
@@ -31,9 +32,13 @@ fun getBugreportFile(context: Context): File {
     Shell.cmd("tar -czf ${tombstonesFile.absolutePath} -C /data/tombstones .").exec()
     Shell.cmd("tar -czf ${dropboxFile.absolutePath} -C /data/system/dropbox .").exec()
     Shell.cmd("tar -czf ${pstoreFile.absolutePath} -C /sys/fs/pstore .").exec()
-    Shell.cmd("tar -czf ${diagFile.absolutePath} -C /data/vendor/diag .").exec()
+    Shell.cmd("tar -czf ${diagFile.absolutePath} -C /data/vendor/diag . --exclude=./minidump.gz").exec()
     Shell.cmd("getprop > ${propFile.absolutePath}").exec()
     Shell.cmd("zcat /proc/config.gz > ${kernelConfig.absolutePath}").exec()
+    Shell.cmd("tar -czf ${oplusFile.absolutePath} -C /mnt/oplus/op2/media/log/boot_log/ .").exec()
+    Shell.cmd("cat /proc/kallsyms > ${kallsymsFile.absolutePath}").exec()
+    Shell.cmd("cat /proc/cpuinfo > ${cpuinfoFile.absolutePath}").exec()
+    Shell.cmd("cat /proc/cmdline > ${cmdlineFile.absolutePath}").exec()
 
     val selinux = Shell.cmd("getenforce").exec().out
 
@@ -55,7 +60,7 @@ fun getBugreportFile(context: Context): File {
         val uname = Os.uname()
         pw.println("KernelRelease: ${uname.release}")
         pw.println("KernelVersion: ${uname.version}")
-        pw.println("Mahcine: ${uname.machine}")
+        pw.println("Machine: ${uname.machine}")
         pw.println("Nodename: ${uname.nodename}")
         pw.println("Sysname: ${uname.sysname}")
 

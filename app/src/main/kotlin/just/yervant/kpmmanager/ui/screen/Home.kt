@@ -3,11 +3,6 @@ package just.yervant.kpmmanager.ui.screen
 import android.os.Build
 import android.system.Os
 import androidx.annotation.StringRes
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,11 +25,8 @@ import androidx.compose.material.icons.filled.InstallMobile
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Cached
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Clear
-import androidx.compose.material.icons.outlined.InstallMobile
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.BasicAlertDialog
@@ -50,14 +42,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -76,21 +66,13 @@ import com.ramcosta.composedestinations.generated.destinations.AboutScreenDestin
 import com.ramcosta.composedestinations.generated.destinations.InstallModeSelectScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.PatchesDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import just.yervant.kpmmanager.KPMMApplication
-import just.yervant.kpmmanager.Natives
 import just.yervant.kpmmanager.R
 import just.yervant.kpmmanager.kpmmApp
 import just.yervant.kpmmanager.ui.component.ProvideMenuShape
-import just.yervant.kpmmanager.ui.component.WarningCard
-import just.yervant.kpmmanager.ui.component.rememberConfirmDialog
 import just.yervant.kpmmanager.ui.viewmodel.PatchesViewModel
-import just.yervant.kpmmanager.util.LatestVersionInfo
 import just.yervant.kpmmanager.util.Version
 import just.yervant.kpmmanager.util.Version.getManagerVersion
-import just.yervant.kpmmanager.util.checkNewVersion
-import just.yervant.kpmmanager.util.getSELinuxStatus
 import just.yervant.kpmmanager.util.reboot
 import just.yervant.kpmmanager.util.ui.APDialogBlurBehindUtils
 
@@ -509,10 +491,6 @@ private fun InfoCard(kpState: KPMMApplication.State) {
 
             Spacer(Modifier.height(16.dp))
             InfoCardItem(stringResource(R.string.home_fingerprint), Build.FINGERPRINT)
-
-            Spacer(Modifier.height(16.dp))
-            InfoCardItem(stringResource(R.string.home_selinux_status), getSELinuxStatus())
-
         }
     }
 }
